@@ -1,0 +1,2103 @@
+<%@ taglib uri="/c.tld" prefix="c" %>
+<%@ taglib uri="/struts-tiles.tld" prefix="tiles" %>
+<%@ taglib uri="/struts-html.tld" prefix="html" %>
+<%@ taglib uri="/struts-logic.tld" prefix="logic" %>
+<%@ taglib uri="/struts-bean.tld" prefix="bean" %>
+<%@ page import="com.galileo.search.air.AirConstants" %>
+<%@ taglib uri="/struts-bean-el.tld" prefix="bean-el" %>
+<jsp:useBean id="airConfigurationSettings" scope="session" class="com.galileo.search.air.common.AirConfiguration"/>
+<jsp:useBean id="userGroupConfigureFlightSettings" scope="session" class="com.travelport.traversa.sites.ejb.userGroup.UserGroupConfigureFlightDataObject"/>
+<jsp:useBean id="travelerProfile" scope="session" class="com.travelport.tds.beans.profile.traveler.Profile"/>
+<script type="text/javascript">
+    history.forward();
+</script>
+
+<c:if test="${!accessibilityEnabled}">
+    <%-- DEFECT 6525 bsa dojo configuration --%>
+    <script type="text/javascript">
+    // bsa the dojo config must be defined before the inclusion of the dojo.js file. An option is to include it with
+    // the Dojo.js but it looks like struts parsing of the page interferes with the loading of the djConfig varaiable.
+    // NOTE: modulePaths is the prefered way to load custom Dojo components and is set up relative to Dojo.js
+     var djConfig = {
+        parseOnLoad: true,
+        isDebug: false,
+        baseScriptUri: '/CTPPresentation/webapp/js/dojo/dojo',
+        modulePaths: {'traversaDojo': '../../traversaDojo'}
+        };
+    </script>
+    
+    <script type="text/javascript" src="/CTPPresentation/webapp/js/dojo/dojo/dojo.js?version=1" ></script>
+    <script type="text/javascript" src="/CTPPresentation/webapp/js/dojo/dojo/traversaAdminDojo.js?version=1" ></script>
+    
+    <script>
+    // bsa 6525
+    // set up the reference to the new combobox
+    // load custom combobox
+    dojo.require("dojo.parser");
+    dojo.require( "traversaDojo.dijit.form.QueryOnSelectionComboBox" );
+    dojo.require("dijit.layout.BorderContainer");
+    dojo.require("dijit.layout.ContentPane");
+    dojo.require("dijit.form.RadioButton");
+    dojo.require("dijit.form.FilteringSelect");
+    </script>
+    <link href="${webappPath}/css/dj_admin.css" rel="stylesheet" type="text/css" />
+    <%-- bsa 6525 field messages --%>
+    <c:set var="cityPromptMsg" scope="page"><bean:message key="Enter a city name or city code" /></c:set>
+    <c:set var="cityInvalidMsg" scope="page"><bean:message key="City is required" /></c:set>
+</c:if>
+    
+<script type="text/javascript" src="/CTPPresentation/webapp/js/flightSearch.js"></script>
+
+<div role="main"></div>
+<tiles:insert name="globalError" />
+<tiles:insert name="arrangingForDropDown" />
+
+<c:set var="baseUrl" value="${rootPath}/AjaxLookupServlet?"/>
+<c:set var="fontWeight" value ="${FONT_WEIGHT}" scope="page" /> 
+<c:set var="accessibilityChecked" value ="${accessibility}" scope="page" />
+
+<script type="text/javascript">
+    var accessibilityChecked = "${accessibilityChecked}";
+    var baseURL = "${baseUrl}"; //used for ajax call
+    var defaultDepatureAirport="${airportName}";
+            
+    var fontWeight = "${fontWeight}";   
+</script>
+
+<html:form action="/flightSearch">
+
+<c:if test="${!accessibilityEnabled}">
+    <!-- 
+    bsa - defect 6525
+    This code creates hidden fields needed for the Dojo implementation of the
+    search functionality. There must be a struts reference to a form property 
+    defined in the JSP for the property to be accessible from the DOM. By 
+    adding a hidden field for each to/from/connection city in the search form, 
+    the element is added to the DOM.
+    DO NOT REMOVE THIS
+    -->
+    <c:forEach items="${flightSearchForm.airSearchRequests}" var="item" varStatus="statusHF">
+        <c:set var="indexHF" value="${statusHF.index}" />
+        <html:hidden name="flightSearchForm" property="airSearchRequests[${indexHF}].fromCity" />
+        <html:hidden name="flightSearchForm" property="airSearchRequests[${indexHF}].toCity" />
+        <html:hidden name="flightSearchForm" property="airSearchRequests[${indexHF}].connectionCity" />
+    </c:forEach>
+    <html:hidden property="airAnswerRadio"   styleId="airAnswerRadiohidden" />
+</c:if>
+
+    <html:hidden property="needToShowtravelAdvisory" value="${!empty travelAdvisoryMessages}"/>
+    <html:hidden property="travelAdvisoryWasShown"   value="false"/>
+    <html:hidden property="showConnectionCheckBox"   value="${airConfigurationSettings.showConnectionCheckBox}"/>
+    <html:hidden property="showNonStopOnlyCheckBox"   value="${airConfigurationSettings.showNonStopOnlyCheckBox}"/>
+    <html:hidden property="allowUserToEnterSpecificTime"/>
+    <html:hidden property="needToShowPolicyWarning" value="${!empty policyWarningMessages}"/>
+    <html:hidden property="policyWarningWasShown"   value="false"/>
+    <%-- Defect # 165 start --%>
+    <html:hidden property="defaultDepartureDate"/>
+    <html:hidden property="useFromDepartOrArrive" value="${airConfigurationSettings.defaultFromTimeDepOrArr}"/>
+    <html:hidden property="useReturnDepartOrArrive" value="${airConfigurationSettings.defaultReturnTimeDepOrArr}"/>
+<!--    <html:hidden property="defaultDepatureAirport"   value="${travelerProfile.generalInformation.departureAirport}"/> -->
+    <html:hidden property="defaultLeaveTime" />
+    <html:hidden property="defaultReturnTime"/>
+    <%-- Defect # 165 Ends --%>
+    <%-- Defect # 6122 Start --%>
+    <html:hidden property="refundableCheckBoxState"/>
+    <html:hidden property="railOnlyCheckBoxState"/>
+    <html:hidden property="acPass"   value="${flightSearchForm.acPass}"/>
+    <c:set var="flightPassInfoIconMsg1" scope="page"><bean:message key="FLIGHT_PASS_INFO_ICON_MSG" /></c:set>
+    <c:set var="flightPassInfoIconMsg2" scope="page"><bean:message key="Flight passes do not apply on multi-city searches or search by schedule."/></c:set>
+    
+    <%-- Defect # 6122 End --%>
+    <c:if test="${accessibilityEnabled}">
+        <html:hidden property="lookupHomeAirport" value="FlightSearchLookup" />
+    
+        <html:hidden property="selectedLeaveDate1"   value="${flightSearchForm.selectedLeaveDate1}"/>
+        <html:hidden property="selectedMonthDate1"   value="${flightSearchForm.selectedMonthDate1}"/>
+        <html:hidden property="selectedYearDate1"   value="${flightSearchForm.selectedYearDate1}"/>
+    
+        <html:hidden property="selectedReturnDate"   value="${flightSearchForm.selectedReturnDate}"/>
+        <html:hidden property="selectedReturnMonth"   value="${flightSearchForm.selectedReturnMonth}"/>
+        <html:hidden property="selectedReturnYear"   value="${flightSearchForm.selectedReturnYear}"/>
+    
+        <html:hidden property="selectedLeaveDate"   value="${flightSearchForm.selectedLeaveDate}"/>
+        <html:hidden property="selectedMonthDate"   value="${flightSearchForm.selectedMonthDate}"/>
+        <html:hidden property="selectedYearDate"   value="${flightSearchForm.selectedYearDate}"/>
+    
+        <html:hidden property="selectedLeaveDate2"   value="${flightSearchForm.selectedLeaveDate2}"/>
+        <html:hidden property="selectedMonthDate2"   value="${flightSearchForm.selectedMonthDate2}"/>
+        <html:hidden property="selectedYearDate2"   value="${flightSearchForm.selectedYearDate2}"/>
+    
+        <html:hidden property="selectedLeaveDate3"   value="${flightSearchForm.selectedLeaveDate3}"/>
+        <html:hidden property="selectedMonthDate3"   value="${flightSearchForm.selectedMonthDate3}"/>
+        <html:hidden property="selectedYearDate3"   value="${flightSearchForm.selectedYearDate3}"/>
+    
+        <html:hidden property="selectedLeaveDate4"   value="${flightSearchForm.selectedLeaveDate4}"/>
+        <html:hidden property="selectedMonthDate4"   value="${flightSearchForm.selectedMonthDate4}"/>
+        <html:hidden property="selectedYearDate4"   value="${flightSearchForm.selectedYearDate4}"/>
+    
+        <html:hidden property="selectedLeaveDate5"   value="${flightSearchForm.selectedLeaveDate5}"/>
+        <html:hidden property="selectedMonthDate5"   value="${flightSearchForm.selectedMonthDate5}"/>
+        <html:hidden property="selectedYearDate5"   value="${flightSearchForm.selectedYearDate5}"/>
+        
+        <html:hidden property="lookUpField"   value="${flightSearchForm.lookUpField}"/>
+        <html:hidden property="dateFocus"   value="${flightSearchForm.dateFocus}"/>
+    </c:if>
+    <c:choose>
+        <c:when test="${shopping_cart == null}">
+            <c:set var="inShoppingFlow" value="false"></c:set>
+            <c:set var="fromHotelOrCar" value="false"></c:set>
+        </c:when>
+        <c:otherwise>
+            <c:set var="fromHotelOrCar" value="${shopping_cart.hasHotel or shopping_cart.hasCar}"></c:set>
+            <c:set var="inShoppingFlow" value="${shopping_cart.shoppingFlow}"></c:set>
+        </c:otherwise>
+    </c:choose>
+    <script type="text/javascript" >
+        var fromHotelOrCar = ${fromHotelOrCar};
+        var inShoppingFlow = ${inShoppingFlow};
+        var premEconIndex = -1;
+        var premEconCabin = null;
+    </script>
+    
+    <c:if test="${shopping_cart.hasAir || shopping_cart.hasRail}">
+        <c:set var="itinPage" value="viewCart" />
+        <c:set var="cartLink">
+            <html:link action="exitShoppingFlow" paramId="forward" paramName="itinPage">
+                <bean:message key="view your cart"/>
+            </html:link>
+        </c:set>
+        <div class="warning">
+            <c:choose>
+                <c:when test="${enableRail}">
+                    <bean-el:message key="Another flight/rail will not be added.  You can {0} or start another flight/rail search." arg0="${cartLink}" />
+                    <bean:message key="Selecting different flight/rail options will replace the current flight/rail in your shopping cart" />
+                </c:when>
+                <c:otherwise>
+                    <bean-el:message key="Another flight will not be added.  You can {0} or start another flight search." arg0="${cartLink}" />
+                    <bean:message key="Selecting different flight options will replace the current flight in your shopping cart" />
+                </c:otherwise>  
+            </c:choose>
+        </div>
+    </c:if>
+    
+    <c:choose>
+        <c:when test="${enableRail}">
+            <c:set var="remFlightKey" scope="page"><bean:message key="Remove Flight/Rail" /></c:set>
+            <c:set var="lookupButtonKey" scope="page" value="lookupButtonFR"></c:set>
+            <c:set var="addFLRKey" scope="page"><bean:message key="Add Another Flight/Rail" /></c:set>
+        </c:when>
+        <c:otherwise>
+            <c:set var="remFlightKey" scope="page"><bean:message key="Remove Flight" /></c:set>
+            <c:set var="lookupButtonKey" scope="page" value="lookupButton"></c:set>
+            <c:set var="addFLRKey" scope="page"><bean:message key="Add Another Flight" /></c:set>
+        </c:otherwise>
+    </c:choose>
+    
+    <c:if test="${accessibilityEnabled}">
+        <c:choose>
+            <c:when test="${enableRail}">
+                <c:set var="roundTrip" scope="page"><bean:message key="Select Round-Trip for flight/rail search" /></c:set>
+                <c:set var="oneWay" scope="page"><bean:message key="Select One-Way for flight/rail search" /></c:set>
+                <c:set var="multiCity" scope="page"><bean:message key="Select Multi-city for flight/rail search" /></c:set> 
+                <c:set var="price" scope="page"><bean:message key="Select Price to search flights/rail by price" /></c:set>
+                <c:set var="schedule" scope="page"><bean:message key="Select Schedule to search flights/rail by Schedule" /></c:set>
+            </c:when>
+            <c:otherwise>
+                <c:set var="roundTrip" scope="page"><bean:message key="Select Round-Trip for flight search" /></c:set>
+                <c:set var="oneWay" scope="page"><bean:message key="Select One-Way for flight search" /></c:set>
+                <c:set var="multiCity" scope="page"><bean:message key="Select Multi-city for flight search" /></c:set>  
+                <c:set var="price" scope="page"><bean:message key="Select Price to search flights by price" /></c:set>
+                <c:set var="schedule" scope="page"><bean:message key="Select Schedule to search flights by Schedule" /></c:set>
+            </c:otherwise>
+        </c:choose>
+        <c:if test="${airConfigurationSettings.supportACFlightPass}">
+            <c:set var="flightPassTitleKey" scope="page"><bean:message key="To view your Air Canada Flight Passes" /></c:set>
+        </c:if>
+    </c:if>
+    <c:if test="${airConfigurationSettings.supportACFlightPass}">
+        <c:choose>
+        <c:when test="${accessibility}">
+            <c:set var="flightPassInfoIconMsg" scope="page">${flightPassInfoIconMsg1} ${flightPassInfoIconMsg2}</c:set>
+        </c:when>
+        <c:otherwise>
+            <c:set var="flightPassInfoIconMsg" scope="page">${flightPassInfoIconMsg1} <br><br> ${flightPassInfoIconMsg2}</c:set>
+        </c:otherwise>
+        </c:choose>
+    </c:if>
+
+    
+<table class="flightSearchSizing">
+    <tr>
+        <td class="fssOne">
+    <c:choose>
+    <c:when test="${accessibility}">
+        <fieldset class="fieldset550">
+    </c:when>
+    <c:otherwise>
+        <fieldset>
+    </c:otherwise>
+    </c:choose>
+        <legend><bean:message key="Select search type" /></legend>
+        <div id="radio">
+            <c:if test="${accessibilityEnabled}">
+                <div class="hiddenHeading">
+                    ${roundTrip}
+                </div>
+            </c:if>
+            <html:radio onclick="changeFlightSearchType(this);" property="flightType" value="<%=AirConstants.ROUND_TRIP%>" styleId="roundTrip" title="${roundTrip}" tabindex="0"/><label for="roundTrip" id="rt"><bean:message key="Round-trip" /></label>
+            <c:if test="${accessibilityEnabled}">
+                <div class="hiddenHeading">
+                    ${oneWay}
+                </div>
+            </c:if>
+            <html:radio onclick="changeFlightSearchType(this);" property="flightType" value="<%=AirConstants.ONE_WAY%>" styleId="oneWay" title="${oneWay}" tabindex="0"/><label for="oneWay" id="ow"><bean:message key="One-way" /></label>
+            <c:if test="${accessibilityEnabled}">
+                <div class="hiddenHeading">
+                    ${multiCity}
+                </div>
+            </c:if>
+            <html:radio onclick="changeFlightSearchType(this);" property="flightType" value="<%=AirConstants.MULTI_CITY%>" styleId="multiCity" title="${multiCity}" tabindex="0"/><label for="multiCity" id="mc"><bean:message key="Multi-city" /></label>
+        </div>
+    </fieldset>
+    </td>
+    <td class="fssTwo">
+    &nbsp;
+    </td>
+        <td class="fssThree">
+    <c:choose>
+        <c:when test ="${!airConfigurationSettings.supportACFlightPass}">   
+            <c:choose>
+            <c:when test="${accessibility}">
+                <fieldset class="fieldset550">
+            </c:when>
+            <c:otherwise>
+                <fieldset>
+            </c:otherwise>
+            </c:choose>
+              <legend><bean:message key="Search By:" /></legend>
+               <div class="searchBy">
+                 <div id="radio">
+                        <c:if test="${airConfigurationSettings.showSearchByPrice}">         
+                        <!--  onclick="displayPremiumEconomyClassIfRequired(this);" -->
+                        <div class="hiddenHeading">
+                            ${price}
+                        </div>
+                        <html:radio onclick="displayPremiumEconomyClassIfRequired(this);" property="searchBy" value="<%=AirConstants.SEARCH_TYPE_PRICE%>" styleId="price" title="${price}" tabindex="0"/><label for="price" id="pr"><bean:message key="Price" /></label>
+                    </c:if>
+                    <c:if test="${airConfigurationSettings.showSearchBySchedule}">
+                        <!--  onclick="displayPremiumEconomyClassIfRequired(this);" -->
+                        <div class="hiddenHeading">
+                            ${schedule}
+                        </div>
+                        <html:radio onclick="displayPremiumEconomyClassIfRequired(this);" property="searchBy" value="<%=AirConstants.SEARCH_TYPE_SCHEDULE%>" styleId="schedule" title="${schedule}" tabindex="0"/><label for="schedule" id="sc"><bean:message key="Schedule" /></label>
+                    </c:if>
+                  </div>
+                </div>
+             </fieldset>
+         </c:when>
+        <c:otherwise>
+            <div class="holdSearchBy">
+            <div class="column1">
+                <c:choose>
+                <c:when test="${accessibility}">
+                    <fieldset class="${fieldsetClassSmallFlightPass}">
+                </c:when>
+                <c:otherwise>
+                    <fieldset class="fieldset150">
+                    <!-- <fieldset class="${fieldsetClassSmallWithoutBorder}"> -->
+                </c:otherwise>
+                </c:choose>
+                  <legend><bean:message key="Search By:" /></legend>
+                   <div class="searchBy">
+                     <div id="radio">
+                            <c:if test="${airConfigurationSettings.showSearchByPrice}">         
+                            <!--  onclick="displayPremiumEconomyClassIfRequired(this);" -->
+                            <div class="hiddenHeading">
+                                ${price}
+                            </div>
+                            <html:radio onclick="displayPremiumEconomyClassIfRequired(this);" property="searchBy" value="<%=AirConstants.SEARCH_TYPE_PRICE%>" styleId="price" title="${price}" tabindex="0"/><label for="price" id="pr"><bean:message key="Price" /></label>
+                        </c:if>
+                        <c:if test="${airConfigurationSettings.showSearchBySchedule}">
+                            <!--  onclick="displayPremiumEconomyClassIfRequired(this);" -->
+                            <div class="hiddenHeading">
+                                ${schedule}
+                            </div>
+                            <html:radio onclick="displayPremiumEconomyClassIfRequired(this);" property="searchBy" value="<%=AirConstants.SEARCH_TYPE_SCHEDULE%>" styleId="schedule" title="${schedule}" tabindex="0"/><label for="schedule" id="sc"><bean:message key="Schedule" /></label>
+                        </c:if>
+                      </div>
+                    </div>
+                 </fieldset>
+            </div>
+            
+
+    </c:otherwise>
+    </c:choose>
+    </td>
+</tr>
+</table>
+
+<c:choose>
+        <c:when test ="${!airConfigurationSettings.supportACFlightPass}">
+        </c:when>
+<c:otherwise>
+<c:choose>
+                <c:when test="${accessibility}">
+                    <div class="column2">
+                </c:when>
+                <c:otherwise>
+                    <div class="holdSearchBy">
+                </c:otherwise>
+                </c:choose>
+                    <div class="displayLink" id="displayLink">
+                        <c:choose>
+                        <c:when test="${flightSearchForm.acPass}">
+                            <html:link href="#" styleId="acPassText" title="" onclick="deselectFlightPass();" tabindex="0"><bean:message key="Deselect Flight Pass"/></html:link>
+                        </c:when>
+                        <c:otherwise>
+                            <html:link href="#" styleId="acPassText" title="${flightPassTitleKey}" onclick="searchFlightPass();" tabindex="0"><bean:message key="Select a Flight Pass"/></html:link>
+                            <p class="xxSmall">&nbsp;</p>
+                        </c:otherwise>
+                        </c:choose>
+                    </div>
+                    <c:choose>
+                    <c:when test="${accessibility}">
+                        <span class="greyedOutFP" id="greyedOut" style="display:none">
+                    </c:when>
+                    <c:otherwise>
+                        <span class="greyedOut" id="greyedOut" style="display:none">
+                    </c:otherwise>
+                    </c:choose>
+                        <u><bean:message key="Select a Flight Pass"/></u>
+                    </span>
+                </div>
+                <c:choose>
+                    <c:when test="${!accessibilityEnabled}">
+                        <div class="infoIcon">
+                            <html:link href="#acFlightPassInfo" styleClass="infoIcon" styleId="acFlightPassInfo">
+                                <img src="${webappPath}/img/icons/infoIcon.gif" alt="" />
+                                <span>${flightPassInfoIconMsg}</span>
+                            </html:link>
+                            <p>&nbsp;</p>
+                        </div>
+                    </c:when>
+                    <c:otherwise>
+                        <div class="infoIcon">
+                        <html:link href="#acFlightPassInfo" styleClass="infoIcon" styleId="acFlightPassInfo" title="${flightPassInfoIconMsg}" tabindex="0">
+                                <img src="${webappPath}/img/icons/infoIcon.gif" alt="${flightPassInfoIconMsg}" />
+                        </html:link>
+                        </div>
+
+                    </c:otherwise>
+                </c:choose>
+                
+                    </c:otherwise>
+    </c:choose>
+
+
+    <%--  departure flight start --%>
+    <c:set var="fromKey" scope="page"><bean:message key="From:" /></c:set>
+    <c:set var="lookUpKey" scope="page"><bean:message key="Lookup In Progress..." /></c:set>
+    <c:set var="leaveKey" scope="page"><bean:message key="Leave:" /></c:set>
+    <c:set var="arriveKey" scope="page"><bean:message key="Arrive" /></c:set>
+    <c:set var="departKey" scope="page"><bean:message key="Depart" /></c:set>
+    <c:set var="connCityKey" scope="page"><bean:message key="Connection City:" /></c:set>
+    <c:set var="nonStopKey" scope="page"><bean:message key="Non Stop Only" /></c:set>
+    <c:set var="toKey" scope="page"><bean:message key="To:" /></c:set>
+    <c:set var="flightKey" scope="page"><bean:message key="Segment #" /></c:set>
+    <c:set var="classFareTypeKey" scope="page"><bean:message key="Class or Fare Type:" /></c:set>
+    <c:if test="${accessibilityEnabled}">
+        <c:set var="fromKeyAccessibility" scope="page"><bean:message key="Leaving From:" /></c:set>
+        <c:set var="toKeyAccessibility" scope="page"><bean:message key="Arriving To:" /></c:set>
+        <c:set var="yearLabelKey" scope="page"><bean:message key="Year:" /></c:set>
+        <c:set var="dayTitleLeaveKey" scope="page"><bean:message key="Select Leaving Day from options" /></c:set>
+        <c:set var="monthTitleLeaveKey" scope="request"><bean:message key="Select Leaving Month from options" /></c:set>
+        <c:set var="yearTitleLeaveKey" scope="request"><bean:message key="Select Leaving Year from options" /></c:set>
+        <c:set var="dayTitleReturnKey" scope="request"><bean:message key="Select Returning Day from options" /></c:set>
+        <c:set var="monthTitleReturnKey" scope="request"><bean:message key="Select Returning Month from options" /></c:set>
+        <c:set var="yearTitleReturnKey" scope="request"><bean:message key="Select Returning Year from options" /></c:set>
+        <c:set var="departArriveKey" scope="page"><bean:message key="Depart or Arrive" /></c:set>
+        <c:set var="departArriveTitleKey" scope="page"><bean:message key="Select Depart or Arrive from options"/></c:set>
+        <c:choose>
+            <c:when test="${enableRail}">
+                <c:set var="connectionCityTitleKeyLeave" scope="page"><bean:message key="To Enter Connection City for Leaving Flight/Rail" /></c:set>
+                <c:set var="connectionCityTitleKeyReturn" scope="page"><bean:message key="To Enter Connection City for Returning Flight/Rail" /></c:set>
+                <c:set var="fromTitleKey" scope="page"><bean:message key="To enter leaving from Airport/Rail Station" /></c:set>
+                <c:set var="toTitleKey" scope="page"><bean:message key="To enter arriving to Airport/Rail Station" /></c:set>
+                <c:set var="addFlightKey" scope="page"><bean:message key="To add another flight/rail" /></c:set>
+                <c:set var="removeFlightKey" scope="page"><bean:message key="To remove flight/rail" /></c:set>
+                <c:set var="leaveclassFareTitleKey" scope="page"><bean:message key="Select Leaving flight/rail class or fare type from options" /></c:set>
+                <c:set var="returnclassFareTitleKey" scope="page"><bean:message key="Select Returning flight/rail class or fare type from options" /></c:set>
+            </c:when>
+            <c:otherwise>
+                <c:set var="connectionCityTitleKeyLeave" scope="page"><bean:message key="To Enter Connection City for Leaving Flight" /></c:set>
+                <c:set var="connectionCityTitleKeyReturn" scope="page"><bean:message key="To Enter Connection City for Returning Flight" /></c:set>
+                <c:set var="fromTitleKey" scope="page"><bean:message key="To enter leaving from Airport" /></c:set>
+                <c:set var="toTitleKey" scope="page"><bean:message key="To enter arriving to Airport" /></c:set>
+                <c:set var="addFlightKey" scope="page"><bean:message key="To add another flight" /></c:set>
+                <c:set var="removeFlightKey" scope="page"><bean:message key="To remove flight" /></c:set>
+                <c:set var="leaveclassFareTitleKey" scope="page"><bean:message key="Select Leaving flight class or fare type from options" /></c:set>
+                <c:set var="returnclassFareTitleKey" scope="page"><bean:message key="Select Returning flight class or fare type from options" /></c:set>
+            </c:otherwise>
+        </c:choose>
+        <c:set var="leavingKey" scope="page"><bean:message key="Leaving Details" /></c:set>
+        <c:set var="returningKey" scope="page"><bean:message key="Returning Details" /></c:set>
+        <c:set var="infoIconTitleKey" scope="page"><bean:message key="Use the time window search to allow different time ranges preceding and following the specific times entered above" /></c:set>
+        <c:set var="timeKey" scope="page"><bean:message key="Time:" /></c:set>
+        <c:set var="tabindex" scope="page">0</c:set>
+        <c:set var="timeTitle" scope="page"><bean:message key="Select time from options" /></c:set>
+        <c:set var="airlineDirTitleKey" scope="page"><bean:message key="To view Supplier directory and add suppliers to preferred supplier list" /></c:set>
+        <c:set var="timewindowTitleKey" scope="page"><bean:message key="Select time window from options" /></c:set>
+        <c:set var="preferredTitleKey" scope="page"><bean:message key="Select Preferred Suppliers from options" /></c:set>
+        <c:set var="tripadvisoryOkbtn" scope="page" value="Click OK to go back to the page"></c:set>
+        <c:set var="departArriveFreeTextKey" scope="page"><bean:message key="Use combobox to define Departing or Arriving time for the leaving flight" /></c:set>
+    </c:if>
+    
+<c:choose>
+<c:when test="${!accessibilityEnabled}">
+    <!--  START: departure/return -->   
+    <div id="departureFlight">
+        <!--  From/To error row -->
+        <div class="sharedErrorRow">
+            <html:messages id="error" property="fromCity0" message="false">
+                <div class="error">${error}</div>
+            </html:messages>
+            <html:messages id="error" property="toCity1" message="false">
+                <div class="error">${error}</div>
+            </html:messages>            
+        </div>      
+        <c:set var="fromVal"><c:out value="${flightSearchForm.airSearchRequests[0].fromCity}" escapeXml="true"></c:out>
+        </c:set>
+        <!--  From/To error -->
+        <div class="flightDetailsColumn">
+            <label for="fromCB">${fromKey}</label>
+            <!-- Dojo based query ComboBox, provides a second lookup list -->
+            <c:set var="defaultSelected" value="false"/>
+         <c:choose>
+            <c:when test="${!flightSearchForm.acPass}">
+            <input dojoType="traversaDojo.dijit.form.QueryOnSelectionComboBox"
+                    searchAttr="sortKey"
+                    labelAttr="name"
+                    name="fromCB"
+                    id="fromCB"
+                    jsId="fromCBJSID"
+                    autoComplete="false"
+                    hasDownArrow="false"
+                    searchDelay="100"
+                    highlightMatch="all"
+                    required="true"
+                    updateStrutsForm="airUpdateFromToCityStrutsForm"
+                    secondResolutionURL="lookupAirportCityAction.do?method=lookupAirports&includeMetro=Y"
+                    pageSize="1000"
+                    promptMessage="${cityPromptMsg}"
+                    invalidMessage="${cityInvalidMsg}"
+                    class="tundra"
+                    style="width:160px; height:16px;"
+                    value="${fromVal}"
+                    formAttribute='{formAttr:{index:0,from: true}}' />
+            </c:when>
+                <c:otherwise>
+                    <c:set var="travelerAirportCode" value="${sessionScope.travelerAirportCode}"/>
+                    <c:set var="selectedFromAirport" value="${flightSearchForm.airSearchRequests[0].fromCity}"/>
+                    <c:set var="selectedToAirport" value="${flightSearchForm.airSearchRequests[1].toCity}"/>
+                        <html:select name="flightSearchForm" property="airSearchRequests[0].fromCity" size="0" value="${flightSearchForm.airSearchRequests[0].fromCity}" styleId="fromCB" styleClass="fromCB" onchange="javascript:populateToAirports();" >
+                        <option value="-1" selected="selected">Please Select</option>
+                            <c:forEach items="${flightSearchForm.fromAirportsList}" var="fromAirports" varStatus="fromAirportStatus">
+                                <c:choose>
+                                    <c:when test="${fromAirports.airportCode eq travelerAirportCode}">
+                                        <option value="${fromAirports.airportCode}" selected="selected"">${fromAirports.displayAirport}</option>
+                                            <c:set var="defaultSelected" value="true"/>
+                                    </c:when>
+                                    <c:otherwise>
+                                         <c:choose>
+                                             <c:when test="${fromAirports.airportCode eq selectedFromAirport}">
+                                                <option value="${fromAirports.airportCode}" selected="selected">${fromAirports.displayAirport}</option>     
+                                             </c:when>
+                                             <c:otherwise>
+                                                <option value="${fromAirports.airportCode}">${fromAirports.displayAirport}</option>
+                                             </c:otherwise>
+                                        </c:choose>
+                                    </c:otherwise>
+                                </c:choose>
+                            </c:forEach>    
+                        </html:select>
+                </c:otherwise>
+            </c:choose>
+                <c:if test="${defaultSelected and (selectedToAirport eq '' or selectedToAirport eq -1) }">
+                    <script language="javascript">
+                        populateToAirports();
+                    </script>
+                </c:if> 
+        </div>  
+        
+        <c:set var="toVal"><c:out value="${flightSearchForm.airSearchRequests[1].toCity}" escapeXml="true"></c:out>
+        </c:set>
+        <div class="flightDetailsColumn">
+            <label for="toCB">${toKey}</label>
+            <!-- Dojo based query ComboBox, provides a second lookup list -->
+            <c:choose>
+                <c:when test="${!flightSearchForm.acPass}">
+            <input dojoType="traversaDojo.dijit.form.QueryOnSelectionComboBox"
+                    searchAttr="sortKey"
+                    labelAttr="name"
+                    name="toCB"
+                    id="toCB"
+                    jsId="toCBJSID"
+                    autoComplete="false"
+                    hasDownArrow="false"
+                    searchDelay="100"
+                    highlightMatch="all"
+                    required="true"
+                    updateStrutsForm="airUpdateFromToCityStrutsForm"
+                    secondResolutionURL="lookupAirportCityAction.do?method=lookupAirports&includeMetro=Y"
+                    pageSize="1000"
+                    promptMessage="${cityPromptMsg}"
+                    invalidMessage="${cityInvalidMsg}"
+                    class="tundra"
+                    style="width:160px; height:16px;"
+                    value="${toVal}"
+                    formAttribute='{formAttr:{index:1,from: false}}' />
+                </c:when>
+            <c:otherwise>
+            <c:set var="selectedToAirport" value="${flightSearchForm.airSearchRequests[1].toCity}"/>
+            <c:set var="selectedFromAirport" value="${flightSearchForm.airSearchRequests[0].fromCity}"/>
+                    <html:select name="flightSearchForm" property="airSearchRequests[1].toCity" value="${flightSearchForm.airSearchRequests[1].toCity}" size="0" styleId="toCB" onchange="populateSearchReq(this);" style="width:160px">
+                        <c:choose>
+                            <c:when test="${selectedFromAirport eq '' or selectedFromAirport eq -1}">
+                                <option value="-1" selected="selected">Select Departure Airport</option>
+                            </c:when>
+                            <c:otherwise>
+                                <option value="-1" selected="selected">Please Select</option>
+                            </c:otherwise>
+                        </c:choose>
+                        <c:forEach items="${flightSearchForm.toAirportsList}" var="toAirports" varStatus="toAirportStatus">
+                            <c:choose>
+                                <c:when test="${toAirports.airportCode eq selectedToAirport}">
+                                    <option value="${toAirports.airportCode}" selected="selected">${toAirports.displayAirport}</option>
+                                </c:when>
+                                <c:otherwise>
+                                    <option value="${toAirports.airportCode}">${toAirports.displayAirport}</option>
+                                </c:otherwise>
+                            </c:choose>
+                        </c:forEach>    
+                    </html:select>
+            </c:otherwise>
+            </c:choose>
+
+        </div>
+        
+        <c:if test="${!empty flightSearchForm.cabinClasses}">
+            <div class="flightDetailsColumn">
+                <div class="clear"></div>
+                <label for="classType">${classFareTypeKey}</label>
+                <html:select name="flightSearchForm" property="airSearchRequests[${0}].selectedCabin" size="0" styleId="cabinList" >
+                <c:forEach items="${flightSearchForm.cabinClasses}" var="cabin" varStatus="cabinStatus">
+                        <html:option value="${cabinStatus.index}"><bean:message key="${cabin.cabin}" /></html:option>
+                    </c:forEach>    
+                </html:select>
+            </div>
+        </c:if>
+
+        <c:if test="${!empty flightSearchForm.cabinClasses}">
+            <div class="flightDetailsColumn">
+                <div class="clear"></div>
+                <label for="classType">${classFareTypeKey}</label>
+                <html:select name="flightSearchForm" property="airSearchRequests[${1}].selectedCabin" size="0" styleId="cabinList1" >
+                <c:forEach items="${flightSearchForm.cabinClasses}" var="cabin" varStatus="cabinStatus">
+                    <html:option value="${cabinStatus.index}"><bean:message key="${cabin.cabin}" /></html:option>
+                </c:forEach>    
+                </html:select>
+            </div>
+        </c:if>
+        <!--  leave/return -->
+        <div class="clear"></div>
+        <div class="sharedErroRow">
+            <html:messages id="error" property="flightDate0" message="false">
+                <div class="error">${error}</div>
+            </html:messages>
+            <html:messages id="error" property="flightDate1" message="false">
+                <div class="error">${error}</div>
+            </html:messages>
+        </div>          
+        <div class="clear"></div>
+        <div class="sharedErroRow">
+            <html:messages id="error" property="flightTime0" message="false">
+                <div class="error">${error}</div>
+            </html:messages>
+            <html:messages id="error" property="flightTime1" message="false">
+                <div class="error">${error}</div>
+            </html:messages>
+        </div>
+        <div class="flightDetailsColumn">
+            <label for="leave1">${leaveKey}</label>
+            <html:text property="airSearchRequests[${0}].flightDate" styleId="leave1" />
+            <html:select property="airSearchRequests[${0}].useDepartOrArrive">
+                <c:if test="${airConfigurationSettings.defaultFromTimeDepOrArr == 'arrive'}">
+                    <html:option value="arrive">${arriveKey}</html:option>
+                    <html:option value="depart">${departKey}</html:option>              
+                </c:if>
+                <c:if test="${airConfigurationSettings.defaultFromTimeDepOrArr != 'arrive'}">
+                    <html:option value="depart">${departKey}</html:option>
+                    <html:option value="arrive">${arriveKey}</html:option>
+                </c:if>
+            </html:select>
+            <c:set var="timeListValueFrom" value="airSearchRequests[${0}].flightTime" scope="request" />
+            <c:set var="timeStyleIdFrom" value="fromTime" scope="request" />    
+            <c:choose>
+                <c:when test="${airConfigurationSettings.show12hourTime}">
+                    <tiles:insert name="optionTime">
+                        <tiles:put name="timeList" value="${timeListValueFrom}" />
+                        <tiles:put name="timeStyle" value="${timeStyleIdFrom}" />
+                        <c:if test="${flightSearchForm.allowUserToEnterSpecificTime}">
+                        <tiles:put name="userEnteredFlightTime0" value="${flightSearchForm.airSearchRequests[0].flightTime}" />
+                        </c:if>
+                    </tiles:insert>
+                </c:when>
+                <c:otherwise>
+                    <tiles:insert name="optionTime24">
+                        <tiles:put name="timeList" value="${timeListValueFrom}" />
+                        <tiles:put name="timeStyle" value="${timeStyleIdFrom}" />
+                        <c:if test="${flightSearchForm.allowUserToEnterSpecificTime}">                      
+                        <tiles:put name="userEnteredFlightTime0" value="${flightSearchForm.airSearchRequests[0].flightTime}" />
+                        </c:if>
+                    </tiles:insert>
+                </c:otherwise>
+            </c:choose>
+        </div>
+        <div class="flightDetailsColumn">
+            <label for="return1"><bean:message key="Return:" /></label>
+            <html:text property="airSearchRequests[${1}].flightDate" styleId="return1" />
+            <html:select property="airSearchRequests[${1}].useDepartOrArrive" styleId="returnDepartArrive">
+                <c:if test="${airConfigurationSettings.defaultReturnTimeDepOrArr == 'arrive'}">
+                    <html:option value="arrive">${arriveKey}</html:option>
+                    <html:option value="depart">${departKey}</html:option>              
+                </c:if>
+                <c:if test="${airConfigurationSettings.defaultReturnTimeDepOrArr != 'arrive'}">
+                    <html:option value="depart">${departKey}</html:option>
+                    <html:option value="arrive">${arriveKey}</html:option>
+                </c:if>
+            </html:select>
+            <c:set var="timeListValueTo" value="airSearchRequests[${1}].flightTime" scope="request" />
+            <c:set var="timeStyleIdTo" value="toTime" scope="request" />                
+            <c:choose>
+                <c:when test="${airConfigurationSettings.show12hourTime}">
+                    <tiles:insert name="optionTime">
+                        <tiles:put name="timeList" value="${timeListValueTo}" />
+                        <tiles:put name="timeStyle" value="${timeStyleIdTo}" />
+                        <c:if test="${flightSearchForm.allowUserToEnterSpecificTime}">
+                        <tiles:put name="userEnteredFlightTime1" value="${flightSearchForm.airSearchRequests[1].flightTime}" />     
+                        </c:if>
+                    </tiles:insert>
+                </c:when>
+                <c:otherwise>
+                    <tiles:insert name="optionTime24">
+                        <tiles:put name="timeList" value="${timeListValueTo}" />
+                        <tiles:put name="timeStyle" value="${timeStyleIdTo}" />
+                        <c:if test="${flightSearchForm.allowUserToEnterSpecificTime}">
+                        <tiles:put name="userEnteredFlightTime1" value="${flightSearchForm.airSearchRequests[1].flightTime}" />     
+                        </c:if>
+                    </tiles:insert>
+                </c:otherwise>
+            </c:choose>
+        </div>
+
+        
+        <div class="clear"></div>
+        
+        <c:if test="${airConfigurationSettings.showConnectionCheckBox}">
+            <div class="flightDetailsColumn">
+                <html:messages id="error" property="connectionCity0" message="false">
+                    <div class="error">
+                        ${error}
+                    </div>
+                </html:messages>
+            <label for="departConnectCityCB">${connCityKey}</label>
+            
+            <c:set var="depConnVal"><c:out value="${flightSearchForm.airSearchRequests[0].connectionCity}" escapeXml="true"></c:out>
+            </c:set>
+            
+            <!-- Dojo based query ComboBox, provides a second lookup list -->
+            <input dojoType="traversaDojo.dijit.form.QueryOnSelectionComboBox"
+                    searchAttr="sortKey"
+                    labelAttr="name"
+                    name="departConnectCityCB"
+                    id="departConnectCityCB"
+                    jsId="departConnectCityCBJSID"
+                    autoComplete="false"
+                    hasDownArrow="false"
+                    searchDelay="100"
+                    highlightMatch="all"
+                    required="false"
+                    onKeyUp="disableNonStopCheckBox('departConnectCityCB','departNonStop')"
+                    updateStrutsForm="airUpdateConnectionCityStrutsForm"
+                    secondResolutionURL="lookupAirportCityAction.do?method=lookupAirports&includeMetro=Y"
+                    pageSize="1000"
+                    promptMessage="${cityPromptMsg}"
+                    invalidMessage="${cityInvalidMsg}"
+                    class="tundra"
+                    style="width:160px; height:16px;"
+                    value="${depConnVal}"
+                    formAttribute='{formAttr:{index:0,from: true}}' />
+            </div>
+        </c:if>
+        
+        <c:if test="${airConfigurationSettings.showConnectionCheckBox}">
+            <div class="flightDetailsColumn">
+                <html:messages id="error" property="connectionCity1" message="false">
+                    <div class="error">
+                        ${error}
+                    </div>
+                </html:messages>
+                
+                <c:set var="retConnVal"><c:out value="${flightSearchForm.airSearchRequests[1].connectionCity}" escapeXml="true"></c:out>
+                </c:set>
+                <label for="returnConnectCityCB">${connCityKey}</label>
+                <!-- Dojo based query ComboBox, provides a second lookup list -->
+                <input dojoType="traversaDojo.dijit.form.QueryOnSelectionComboBox"
+                        searchAttr="sortKey"
+                        labelAttr="name"
+                        name="returnConnectCityCB"
+                        id="returnConnectCityCB"
+                        jsId="returnConnectCityCBJSID"
+                        autoComplete="false"
+                        hasDownArrow="false"
+                        searchDelay="100"
+                        highlightMatch="all"
+                        required="false"
+                        onKeyUp="disableNonStopCheckBox('returnConnectCityCB','returnNonStop')"
+                        updateStrutsForm="airUpdateConnectionCityStrutsForm"
+                        secondResolutionURL="lookupAirportCityAction.do?method=lookupAirports&includeMetro=Y"
+                        pageSize="1000"
+                        promptMessage="${cityPromptMsg}"
+                        invalidMessage="${cityInvalidMsg}"
+                        class="tundra"
+                        style="width:160px; height:16px;"
+                        value="${retConnVal}"
+                        formAttribute='{formAttr:{index:1,from: false}}' />
+            </div>
+        </c:if>
+        
+        <div class="flightDetailsColumn">
+            <c:if test="${airConfigurationSettings.showNonStopOnlyCheckBox}">
+                <div class="checkboxWrapper">
+                    <html:checkbox property="airSearchRequests[${0}].nonStopOnly" styleId="departNonStop" styleClass="checkbox" onclick="javascript:disableConnectionCityTextBox('departConnectCityCB');" />
+                    <label for="departNonStop" class="nonStop checkboxLabel" id="dns">${nonStopKey}</label>
+                </div>
+            </c:if>
+        </div>
+        <div class="flightDetailsColumn">
+            <c:if test="${airConfigurationSettings.showNonStopOnlyCheckBox}">           
+                <div class="checkboxWrapper">
+                    <html:checkbox property="airSearchRequests[${1}].nonStopOnly" styleId="returnNonStop" styleClass="checkbox" onclick="javascript:disableConnectionCityTextBox('returnConnectCityCB');" />
+                    <label for="returnNonStop" class="nonStop checkboxLabel" id="dns">${nonStopKey}</label>
+                </div>
+            </c:if>
+        </div>
+        <div class="clear"></div>
+    </div>
+
+    
+
+    <%-- oneway leg and 3 multicity leg dynamic form generation starts --%>
+    <c:forEach items="${flightSearchForm.airSearchRequests}" var="item" begin="2" varStatus="status">
+        <c:set var="index" value="${status.index}" />
+        
+        <c:choose>
+            <c:when test="${status.first}">
+                <c:set var="containerID" value="oneWayFlight" />
+                <c:set var="headerID" value="oneWayMultiCityHeader" />
+            </c:when>
+            <c:otherwise>
+                <c:set var="containerID" value="multiCityFlight${index - 1}" />
+                <c:set var="headerID" value="" />
+            </c:otherwise>
+        </c:choose>
+        <div id="${containerID}">
+            <div id="flight${index - 1}">
+                <div class="sharedErrorRow">
+                    <html:messages id="error" property="fromCity${index}" message="false">
+                        <div class="error">${error}</div>
+                    </html:messages>            
+                    <html:messages id="error" property="toCity${index}" message="false">
+                        <div class="error">${error}</div>
+                    </html:messages>
+                </div>
+
+                <h3 id="${headerID}">${flightKey}${index-1}</h3>
+                <div class="fromToCityContainer">
+                    <div class="fromCityContainer">
+                        <c:set var="indexVar" value="${index}"/>
+                        <c:set var="fromIdx" value="fromVal${indexVar}"></c:set>
+                        <c:set var="fromValIdxVar"><c:out value="${flightSearchForm.airSearchRequests[indexVar].fromCity}" escapeXml="true"></c:out>
+                        </c:set>
+                        <label for="fromCB${index}">${fromKey}</label>
+                        <!-- Dojo based query ComboBox, provides a second lookup list -->
+                        <c:set var="defaultSelected" value="false"/>
+                        <c:choose>
+                        <c:when test="${!flightSearchForm.acPass}">
+                        <input dojoType="traversaDojo.dijit.form.QueryOnSelectionComboBox"
+                                searchAttr="sortKey"
+                                labelAttr="name"
+                                name="fromCB${index}"
+                                id="fromCB${index}"
+                                jsId="fromCB${index}JSID"
+                                autoComplete="false"
+                                hasDownArrow="false"
+                                searchDelay="100"
+                                highlightMatch="all"
+                                required="true"
+                                updateStrutsForm="airUpdateFromToCityStrutsForm"
+                                secondResolutionURL="lookupAirportCityAction.do?method=lookupAirports&includeMetro=Y"
+                                pageSize="1000"
+                                promptMessage="${cityPromptMsg}"
+                                invalidMessage="${cityInvalidMsg}"
+                                class="tundra"
+                                style="width:160px; height:16px;"
+                                value="${fromValIdxVar}"
+                                formAttribute='{formAttr:{index:${index},from: true}}' />
+                        </c:when>
+                            <c:otherwise>
+                                <c:set var="travelerAirportCode" value="${sessionScope.travelerAirportCode}"/>
+                                <c:set var="selectedFromAirport" value="${flightSearchForm.airSearchRequests[indexVar].fromCity}"/>
+                                <c:set var="selectedToAirport" value="${flightSearchForm.airSearchRequests[2].toCity}"/>
+                                    <html:select name="flightSearchForm" property="airSearchRequests[${indexVar}].fromCity" size="0" value="${flightSearchForm.airSearchRequests[indexVar].fromCity}" styleId="fromCB${index}" onchange="javascript:populateToAirports();" >
+                                    <option value="-1" selected="selected">Please Select</option>
+                                        <c:forEach items="${flightSearchForm.fromAirportsList}" var="fromAirports" varStatus="fromAirportStatus">
+                                            <c:choose>
+                                                <c:when test="${fromAirports.airportCode eq travelerAirportCode}">
+                                                    <option value="${fromAirports.airportCode}" selected="selected">${fromAirports.displayAirport}</option>
+                                                    <c:set var="defaultSelected" value="true"/>
+                                                </c:when>
+                                                <c:otherwise>
+                                                    <c:choose>
+                                                         <c:when test="${fromAirports.airportCode eq selectedFromAirport}">
+                                                            <option value="${fromAirports.airportCode}" selected="selected">${fromAirports.displayAirport}</option>     
+                                                         </c:when>
+                                                         <c:otherwise>
+                                                            <option value="${fromAirports.airportCode}">${fromAirports.displayAirport}</option>
+                                                         </c:otherwise>
+                                                    </c:choose>
+                                                </c:otherwise>
+                                            </c:choose>
+                                        </c:forEach>    
+                                    </html:select>
+                            </c:otherwise>
+                            </c:choose>
+                            <c:if test="${defaultSelected and (selectedToAirport eq '' or selectedToAirport eq -1) }">
+                                <script language="javascript">
+                                    populateToAirports();
+                                </script>
+                            </c:if> 
+                        </div>
+                
+                    <div class="toCityContainer">
+                        <label for="toCB${index}">${toKey}</label>
+                        <c:set var="toIdx" value="toVal${indexVar}"></c:set>
+                        <c:set var="toValIdxVar"><c:out value="${flightSearchForm.airSearchRequests[indexVar].toCity}" escapeXml="true"></c:out>
+                        </c:set>
+                        <c:choose>
+                            <c:when test="${!flightSearchForm.acPass}">
+                        <!-- Dojo based query ComboBox, provides a second lookup list -->
+                        <input dojoType="traversaDojo.dijit.form.QueryOnSelectionComboBox"
+                                searchAttr="sortKey"
+                                labelAttr="name"
+                                name="toCB${index}"
+                                id="toCB${index}"
+                                jsId="toCB${index}JSID"
+                                autoComplete="false"
+                                hasDownArrow="false"
+                                searchDelay="100"
+                                highlightMatch="all"
+                                required="true"
+                                updateStrutsForm="airUpdateFromToCityStrutsForm"
+                                secondResolutionURL="lookupAirportCityAction.do?method=lookupAirports&includeMetro=Y"
+                                pageSize="1000"
+                                promptMessage="${cityPromptMsg}"
+                                invalidMessage="${cityInvalidMsg}"
+                                class="tundra"
+                                style="width:160px; height:16px;"
+                                value="${toValIdxVar}"
+                                formAttribute='{formAttr:{index:${index},from: false}}' />
+                            </c:when>
+                                <c:otherwise>
+                                <c:set var="selectedToAirport" value="${flightSearchForm.airSearchRequests[indexVar].toCity}"/>
+                                <c:set var="selectedFromAirport" value="${flightSearchForm.airSearchRequests[indexVar].fromCity}"/>
+                                    <html:select name="flightSearchForm" property="airSearchRequests[${indexVar}].toCity" value="${flightSearchForm.airSearchRequests[indexVar].toCity}" size="0" styleId="toCB${index}" onchange="populateSearchReq(this);">
+                                        <c:choose>
+                                            <c:when test="${selectedFromAirport eq '' or selectedFromAirport eq -1}">
+                                                <option value="-1" selected="selected">Select Departure Airport</option>
+                                            </c:when>
+                                            <c:otherwise>
+                                                <option value="-1" selected="selected">Please Select</option>
+                                            </c:otherwise>
+                                        </c:choose>
+                                        <c:forEach items="${flightSearchForm.toAirportsList}" var="toAirports" varStatus="toAirportStatus">
+                                            <c:choose>
+                                            <c:when test="${toAirports.airportCode eq selectedToAirport}">
+                                                <option value="${toAirports.airportCode}" selected="selected">${toAirports.displayAirport}</option>
+                                            </c:when>
+                                            <c:otherwise>
+                                                <option value="${toAirports.airportCode}">${toAirports.displayAirport}</option>
+                                            </c:otherwise>
+                                            </c:choose>
+                                        </c:forEach>    
+                                    </html:select>
+                                </c:otherwise>
+                        </c:choose>
+                    </div>
+                </div>
+                <c:if test="${!empty flightSearchForm.cabinClasses}">
+                    <div class="fromCityContainer">
+                        <label for="classType">${classFareTypeKey}</label>
+                        <html:select name="flightSearchForm" property="airSearchRequests[${index}].selectedCabin" size="0" styleId="cabinList${index}" >
+                        <c:forEach items="${flightSearchForm.cabinClasses}" var="cabin" varStatus="cabinStatus">
+                                <html:option value="${cabinStatus.index}"><bean:message key="${cabin.cabin}" /></html:option>
+                            </c:forEach>    
+                        </html:select>
+                    </div>
+                    <div class="clear"></div>
+                </c:if>
+                <div>
+                    <html:messages id="error" property="flightDate${index}" message="false">
+                        <div class="error">
+                            ${error}
+                        </div>
+                    </html:messages>
+                    <label for="leave${index}">${leaveKey}</label>
+                </div>
+                <div>
+                    <html:text property="airSearchRequests[${index}].flightDate" styleId="leave${index}" />
+                </div>
+                <div>
+                    <html:select property="airSearchRequests[${index}].useDepartOrArrive">
+                    <c:if test="${airConfigurationSettings.defaultFromTimeDepOrArr == 'arrive'}">
+                        <html:option value="arrive">${arriveKey}</html:option>
+                        <html:option value="depart">${departKey}</html:option>              
+                    </c:if>
+                    <c:if test="${airConfigurationSettings.defaultFromTimeDepOrArr != 'arrive'}">
+                        <html:option value="depart">${departKey}</html:option>
+                        <html:option value="arrive">${arriveKey}</html:option>
+                    </c:if>
+                    </html:select>
+                    
+                    <c:set var="timeList" value="airSearchRequests[${index}].flightTime" scope="session" />
+                    <c:set var="timeStyle" value="fromTime" scope="session" />
+                    <html:messages id="error" property="flightTime${index}" message="false">
+                        <div class="error">${error}</div>
+                    </html:messages>
+                    
+                    <c:choose>
+                        <c:when test="${airConfigurationSettings.show12hourTime}">
+                            <tiles:insert name="optionTime">
+                                <tiles:put name="timeList" value="${timeList}" />
+                                <tiles:put name="timeStyle" value="${timeStyle}" />
+                                <c:if test="${flightSearchForm.allowUserToEnterSpecificTime}">
+                                <tiles:put name="userEnteredFlightTime2" value="${flightSearchForm.airSearchRequests[index].flightTime}" />     
+                                </c:if>
+                            </tiles:insert>
+                        </c:when>
+                        <c:otherwise>
+                            <tiles:insert name="optionTime24">
+                                <tiles:put name="timeList" value="${timeList}" />
+                                <tiles:put name="timeStyle" value="${timeStyle}" />
+                                <c:if test="${flightSearchForm.allowUserToEnterSpecificTime}">
+                                <tiles:put name="userEnteredFlightTime2" value="${flightSearchForm.airSearchRequests[index].flightTime}" />     
+                                </c:if>
+                            </tiles:insert>
+                        </c:otherwise>
+                    </c:choose>
+                </div>
+                <c:if test="${airConfigurationSettings.showConnectionCheckBox}">
+                    <div>
+                        <html:messages id="error" property="connectionCity${index}" message="false">
+                            <div class="error">
+                                ${error}
+                            </div>
+                        </html:messages>
+                        <label for="departConnectCityCB${index}">${connCityKey}</label>
+                    </div>
+                    <div>
+                        <c:set var="indexVar" value="${index}"/>
+                        <c:set var="departConnIdx" value="departConnVal${indexVar}"></c:set>
+                        <c:set var="departConnValIdxVar"><c:out value="${flightSearchForm.airSearchRequests[indexVar].connectionCity}" escapeXml="true"></c:out>
+                        </c:set>
+                        
+                        <!-- Dojo based query ComboBox, provides a second lookup list -->
+                        <input dojoType="traversaDojo.dijit.form.QueryOnSelectionComboBox"
+                                searchAttr="sortKey"
+                                labelAttr="name"
+                                name="departConnectCityCB${index}"
+                                id="departConnectCityCB${index}"
+                                jsId="departConnectCityCB${index}JSID"
+                                autoComplete="false"
+                                hasDownArrow="false"
+                                searchDelay="100"
+                                highlightMatch="all"
+                                required="false"
+                                onKeyUp="disableNonStopCheckBox('departConnectCityCB${index}','departNonStop${index}')"
+                                updateStrutsForm="airUpdateConnectionCityStrutsForm"
+                                secondResolutionURL="lookupAirportCityAction.do?method=lookupAirports&includeMetro=Y"
+                                pageSize="1000"
+                                promptMessage="${cityPromptMsg}"
+                                invalidMessage="${cityInvalidMsg}"
+                                class="tundra"
+                                style="width:160px; height:16px;"
+                                value="${departConnValIdxVar}"
+                                formAttribute='{formAttr:{index:${index},from: true}}' />
+                    </div>
+                </c:if>
+                <c:if test="${airConfigurationSettings.showNonStopOnlyCheckBox}">
+                    <div class="checkboxWrapper">
+                        <html:checkbox property="airSearchRequests[${index}].nonStopOnly" styleId="departNonStop${index}" styleClass="checkbox" onclick="javascript:disableConnectionCityTextBox('departConnectCityCB${index}');" />
+                        <label for="departNonStop${index}" class="nonStop checkboxLabel" id="dns">${nonStopKey}</label>
+                    </div>
+                </c:if>
+                <c:if test="${index == 4 || index == 5}">
+                    <html:link href="#" anchor="removeFlightAnchor${index}"/>
+                    <html:link href="#removeFlightAnchor${index}" styleId="removeFlight${index-1}" onclick="removeFlight(this);">${remFlightKey}</html:link>
+                </c:if>
+                <html:hidden property="airSearchRequests[${index}].legDisplayed"/>
+            </div>
+        </div>
+    </c:forEach>
+</c:when>
+        
+<c:otherwise>
+        <!--  START: departure -->
+        <div id="departureFlight" style="display:block">
+               <div class="leave_column">   
+                       
+                    <div class="errorRow">
+                        <html:messages id="error" property="fromCity0" message="false">
+                            <div id="errorfrom" class="error"><bean:write name="error" />
+                                    <div class="toplevelMessage"></div> 
+                            </div>
+                        </html:messages> 
+                    </div>   
+                    <div class="flightDetailsColumn">
+                        <label for="from">${fromKeyAccessibility}</label>
+                        <div>
+                        <c:set var="defaultSelected" value="false"/>
+                        <c:choose>
+                        <c:when test="${!flightSearchForm.acPass}">
+                            <html:text property="airSearchRequests[${0}].fromCity" styleId="from" title="${fromTitleKey}" tabindex="0"/>
+                            <div class="required"></div>
+                        </c:when>
+                        <c:otherwise>
+                        <c:set var="travelerAirportCode" value="${sessionScope.travelerAirportCode}"/>
+                        <c:set var="selectedFromAirport" value="${flightSearchForm.airSearchRequests[0].fromCity}"/>
+                            <html:select name="flightSearchForm" property="airSearchRequests[0].fromCity" size="0" value="${flightSearchForm.airSearchRequests[0].fromCity}" styleId="from" styleClass="from" onchange="javascript:populateToAirports();" >
+                            <option value="-1" selected="selected">Please Select</option>
+                                <c:forEach items="${flightSearchForm.fromAirportsList}" var="fromAirports" varStatus="fromAirportStatus">
+                                    <c:choose>
+                                        <c:when test="${fromAirports.airportCode eq travelerAirportCode}">
+                                            <option value="${fromAirports.airportCode}" selected="selected"">${fromAirports.displayAirport}</option>
+                                                <c:set var="defaultSelected" value="true"/>
+                                        </c:when>
+                                        <c:otherwise>
+                                             <c:choose>
+                                                 <c:when test="${fromAirports.airportCode eq selectedFromAirport}">
+                                                    <option value="${fromAirports.airportCode}" selected="selected">${fromAirports.displayAirport}</option>     
+                                                 </c:when>
+                                                 <c:otherwise>
+                                                    <option value="${fromAirports.airportCode}">${fromAirports.displayAirport}</option>
+                                                 </c:otherwise>
+                                            </c:choose>
+                                        </c:otherwise>
+                                    </c:choose>
+                                </c:forEach>    
+                            </html:select>
+                        </c:otherwise>
+                        </c:choose>
+                        <c:if test="${defaultSelected}">
+                            <script language="javascript">
+                                populateToAirports();
+                            </script>
+                        </c:if> 
+                        </div>
+                        <div class="clear"></div>
+                        <c:choose>
+                            <c:when test="${enableRail}">
+                                <c:url value="/lookupAirPortRailPage.do" var="newSearchURL0">
+                                    <c:param name="newSearch" value="pagePopUp" />
+                                    <c:param name="newType" value="0" />
+                                </c:url>
+                            </c:when>
+                            <c:otherwise>
+                                <c:url value="/lookupAirPortPage.do" var="newSearchURL0">
+                                    <c:param name="newSearch" value="pagePopUp" />
+                                    <c:param name="newType" value="0" />
+                                </c:url>
+                            </c:otherwise>
+                        </c:choose>
+                        <div id="siteButtonLookup">
+                        <c:if test="${!flightSearchForm.acPass}">
+                            <tiles:insert name="${lookupButtonKey}" >
+                                <tiles:put name="btnUrl" value="javascript:getAirportPopup('${newSearchURL0}','from');"></tiles:put>
+                                <tiles:put name="title" value="${airportLookupBtnTitle}"></tiles:put>
+                                <tiles:put name="btnSpan" value="lookupButtonflight"></tiles:put>
+                            </tiles:insert>
+                        </c:if>
+                        </div>
+                        <div>${leavingKey}</div>
+                        <c:if test="${!empty flightSearchForm.cabinClasses}">
+                            <div class="clear"></div>
+                            <label for="cabinList">${classFareTypeKey}</label>
+                            <html:select name="flightSearchForm" property="airSearchRequests[${0}].selectedCabin" size="0" styleId="cabinList" title="${leaveclassFareTitleKey}" tabindex="0">
+                                <c:forEach items="${flightSearchForm.cabinClasses}" var="cabin" varStatus="cabinStatus">
+                                    <html:option value="${cabinStatus.index}"><bean:message key="${cabin.cabin}" /></html:option>
+                                </c:forEach>    
+                            </html:select>
+                        </c:if>
+                    </div>
+                    <div class="clear"></div>
+                    
+                    <div class="errorRow">
+                        <html:messages id="error" property="flightDate0" message="false">
+                            <div id="errorleaveDate1" class="error"><bean:write name="error" />
+                                <div class="toplevelMessage"></div> 
+                            </div>
+                        </html:messages> 
+                    </div>      
+                    <div class="flightDetailsColumn">
+                        <div id="leave1_accessbility">
+                                <!-- <label for="leave1">${leavingKey}</label>-->
+                                
+                                <html:hidden property="airSearchRequests[${0}].flightDate" styleId="leave1" />
+                                <div class="clear"></div>
+                                <div class="calendar_control">
+                                    <tiles:insert name="optionDate">
+                                        <tiles:put name="leaveDate" value="leaveDate1" />
+                                        <tiles:put name="leaveMonth" value="leaveMonth1" />
+                                        <tiles:put name="leaveYear" value="leaveYear1" />
+                                        <tiles:put name="returnDate" value="returnDate" />
+                                        <tiles:put name="returnMonth" value="returnMonth" />
+                                        <tiles:put name="returnYear" value="returnYear" />
+                                        <tiles:put name="dayTitleKey" value="${dayTitleLeaveKey}" />
+                                    </tiles:insert>
+                                </div>
+                                <div class="calendar_control">
+                                     <tiles:insert name="optionMonth">
+                                        <tiles:put name="leaveDate" value="leaveDate1" />
+                                        <tiles:put name="leaveMonth" value="leaveMonth1" />
+                                        <tiles:put name="leaveYear" value="leaveYear1" />
+                                        <tiles:put name="returnDate" value="returnDate" />
+                                        <tiles:put name="returnMonth" value="returnMonth" />
+                                        <tiles:put name="returnYear" value="returnYear" />
+                                        <tiles:put name="monthTitleKey" value="${monthTitleLeaveKey}" />
+                                    </tiles:insert>
+                                </div>
+                                <div class="calendar_control">
+                                    <label for="leaveYear1">${yearLabelKey}</label>
+                                    <select name="leaveYear1" id="leaveYear1" tabindex="0" title="${yearTitleLeaveKey}" onchange="dateValidate('leaveDate1','leaveMonth1','leaveYear1', 'returnDate', 'returnMonth', 'returnYear');" >
+                                    </select>
+                                </div>
+                        </div>
+                    </div>
+                    <div class="clear"></div>
+
+                    <div class="errorRow">
+                        <html:messages id="error" property="flightTime0" message="false">
+                            <div id="error${timeStyleIdFrom}" class="error"><bean:write name="error" />
+                                    <div class="toplevelMessage"></div> 
+                            </div>
+                        </html:messages> 
+                    </div>      
+                    <div class="flightDetailsColumn">
+                        <div class="travel_mode_control">
+                            <div class="hiddenHeading">
+                                ${departArriveFreeTextKey} 
+                            </div>
+                            <label for="leaveDepartArrive">${departArriveKey}</label>
+                            <html:select property="airSearchRequests[${0}].useDepartOrArrive" styleId="leaveDepartArrive" tabindex="0" title="${departArriveTitleKey}">
+                                <c:choose>
+                                <c:when test="${airConfigurationSettings.defaultFromTimeDepOrArr == 'arrive'}">
+                                    <html:option value="arrive">${arriveKey}</html:option>
+                                    <html:option value="depart">${departKey}</html:option>              
+                                </c:when>
+                                <c:otherwise>
+                                    <html:option value="depart">${departKey}</html:option>
+                                    <html:option value="arrive">${arriveKey}</html:option>
+                                </c:otherwise>
+                                </c:choose>
+                            </html:select>
+                        </div>
+                        
+                        <div class="travel_mode_control">
+                            <label for="fromTime">${timeKey}</label>
+                            <c:set var="timeListValueFrom" value="airSearchRequests[${0}].flightTime" scope="request" />
+                            <c:set var="timeStyleIdFrom" value="fromTime" scope="request" />    
+                            <c:choose>
+                                <c:when test="${airConfigurationSettings.show12hourTime}">
+                                    <tiles:insert name="optionTime">
+                                        <tiles:put name="timeList" value="${timeListValueFrom}" />
+                                        <tiles:put name="timeStyle" value="${timeStyleIdFrom}" />
+                                        <c:if test="${flightSearchForm.allowUserToEnterSpecificTime}">
+                                            <tiles:put name="userEnteredFlightTime0" value="${flightSearchForm.airSearchRequests[0].flightTime}" />
+                                        </c:if>
+                                        <tiles:put name="timeTitleKey" value="${timeTitle}" />
+                                    </tiles:insert>
+                                </c:when>
+                                <c:otherwise>
+                                    <tiles:insert name="optionTime24">
+                                        <tiles:put name="timeList" value="${timeListValueFrom}" />
+                                        <tiles:put name="timeStyle" value="${timeStyleIdFrom}" />
+                                        <c:if test="${flightSearchForm.allowUserToEnterSpecificTime}">                      
+                                            <tiles:put name="userEnteredFlightTime0" value="${flightSearchForm.airSearchRequests[0].flightTime}" />
+                                        </c:if>
+                                        <tiles:put name="timeTitleKey" value="${timeTitle}" />
+                                    </tiles:insert>
+                                </c:otherwise>
+                            </c:choose>
+                        </div>
+                    </div>
+                    <div class="clear"></div>
+                    
+                    <div class="errorRow">
+                        <html:messages id="error" property="connectionCity0" message="false">
+                            <div id="errordepartConnectCity" class="error"><bean:write name="error" />
+                                <div class="toplevelMessage"></div> 
+                            </div>
+                        </html:messages> 
+                    </div>
+                    <div class="flightDetailsColumn">
+                        <c:if test="${airConfigurationSettings.showConnectionCheckBox}">
+                            <label for="departConnectCity">${connCityKey}</label>
+                            <div>
+                                <html:text property="airSearchRequests[${0}].connectionCity" styleId="departConnectCity" tabindex="0" onkeyup="javascript:disableNonStopCheckBox('departConnectCity','departNonStop');" title="${connectionCityTitleKeyLeave}"/>
+                            </div>
+                            <div class="clear"></div>
+                            <c:choose>
+                                <c:when test="${enableRail}">
+                                    <c:url value="/lookupAirPortRailPage.do" var="newSearchURL0">
+                                        <c:param name="newSearch" value="pagePopUp" />
+                                        <c:param name="newType" value="0" />    
+                                    </c:url>
+                                </c:when>
+                                <c:otherwise>
+                                    <c:url value="/lookupAirPortPage.do" var="newSearchURL0">
+                                        <c:param name="newSearch" value="pagePopUp" />
+                                        <c:param name="newType" value="0" />    
+                                    </c:url>
+                                </c:otherwise>
+                            </c:choose>
+                            <div id="siteButtonLookup">
+                                <tiles:insert name="${lookupButtonKey}" >
+                                    <tiles:put name="btnUrl" value="javascript:getAirportPopup('${newSearchURL0}','departConnectCity');"></tiles:put>
+                                    <tiles:put name="title" value="${airportLookupBtnTitle}"></tiles:put>
+                                    <tiles:put name="btnSpan" value="lookupButtonflight"></tiles:put>
+                                </tiles:insert>
+                            </div>
+                        </c:if>
+                        <div class="clear"></div>
+                        <c:if test="${airConfigurationSettings.showNonStopOnlyCheckBox}">
+                            <div class="checkboxWrapper">
+                                <html:checkbox property="airSearchRequests[${0}].nonStopOnly" styleId="departNonStop" styleClass="checkbox" tabindex="0" onclick="javascript:disableConnectionCityTextBox('departConnectCity');" />
+                                <label for="departNonStop" class="nonStop checkboxLabel" id="dns" >${nonStopKey}</label>
+                            </div>
+                        </c:if>
+                    </div>
+                    <div class="clear"></div>
+                
+                </div>
+                <!--  END: departure -->        
+    
+                <!--  START: return -->        
+                <div class="return_column">
+
+                    <div class="errorRow">
+                        <html:messages id="error" property="toCity1" message="false">
+                            <div id="errorto" class="error"><bean:write name="error" />
+                                <div class="toplevelMessage"></div> 
+                            </div>
+                        </html:messages> 
+                    </div>
+                    <div class="flightDetailsColumn">
+                        <label for="to">${toKeyAccessibility}</label>
+                        <div>
+                            <c:choose>
+                            <c:when test="${!flightSearchForm.acPass}">
+                                 <html:text property="airSearchRequests[${1}].toCity" styleId="to" title="${toTitleKey}" tabindex="0" />
+                            </c:when>
+                             <c:otherwise>
+                                <c:set var="selectedToAirport" value="${flightSearchForm.airSearchRequests[1].toCity}"/>
+                                <c:set var="selectedFromAirport" value="${flightSearchForm.airSearchRequests[0].fromCity}"/>
+                                        <html:select name="flightSearchForm" property="airSearchRequests[1].toCity" value="${flightSearchForm.airSearchRequests[1].toCity}" size="0" styleId="to" onchange="populateSearchReq(this);" style="width:160px">
+                                            <c:choose>
+                                                <c:when test="${selectedFromAirport eq '' or selectedFromAirport eq -1}">
+                                                    <option value="-1" selected="selected">Select Departure Airport</option>
+                                                </c:when>
+                                                <c:otherwise>
+                                                    <option value="-1" selected="selected">Please Select</option>
+                                                </c:otherwise>
+                                            </c:choose>
+                                            <c:forEach items="${flightSearchForm.toAirportsList}" var="toAirports" varStatus="toAirportStatus">
+                                                <c:choose>
+                                                    <c:when test="${toAirports.airportCode eq selectedToAirport}">
+                                                        <option value="${toAirports.airportCode}" selected="selected">${toAirports.displayAirport}</option>
+                                                    </c:when>
+                                                    <c:otherwise>
+                                                        <option value="${toAirports.airportCode}">${toAirports.displayAirport}</option>
+                                                    </c:otherwise>
+                                                </c:choose>
+                                            </c:forEach>    
+                                        </html:select>
+                                </c:otherwise>
+                                </c:choose>
+                            
+                            <div class="required"></div>
+                        </div>
+                        <c:choose>
+                            <c:when test="${enableRail}">
+                                <c:url value="/lookupAirPortRailPage.do" var="newSearchURL0">
+                                    <c:param name="newSearch" value="pagePopUp" />
+                                    <c:param name="newType" value="0" />    
+                                </c:url>
+                            </c:when>
+                            <c:otherwise>
+                                <c:url value="/lookupAirPortPage.do" var="newSearchURL0">
+                                    <c:param name="newSearch" value="pagePopUp" />
+                                    <c:param name="newType" value="0" />    
+                                </c:url>
+                            </c:otherwise>
+                        </c:choose>
+                        <div class="clear"></div>
+                        <div id="siteButtonLookup">
+                        <c:if test="${!flightSearchForm.acPass}">
+                            <tiles:insert name="${lookupButtonKey}" >
+                                    <tiles:put name="btnUrl" value="javascript:getAirportPopup('${newSearchURL0}','to');"></tiles:put>
+                                    <tiles:put name="title" value="${airportLookupBtnTitle}"></tiles:put>
+                                    <tiles:put name="btnSpan" value="lookupButtonflight"></tiles:put>
+                            </tiles:insert>
+                        </c:if>
+                        </div>
+                        <div>${returningKey}</div>
+                        <c:if test="${!empty flightSearchForm.cabinClasses}">
+                            <div class="clear"></div>
+                            <label for="cabinList1">${classFareTypeKey}</label>
+                            <html:select name="flightSearchForm" property="airSearchRequests[${1}].selectedCabin" size="0" styleId="cabinList1" title="${returnclassFareTitleKey}" tabindex="0">
+                                <c:forEach items="${flightSearchForm.cabinClasses}" var="cabin" varStatus="cabinStatus">
+                                    <html:option value="${cabinStatus.index}"><bean:message key="${cabin.cabin}" /></html:option>
+                                </c:forEach>    
+                            </html:select>
+                        </c:if>
+                    </div>
+                    <div class="clear"></div>
+                      
+                    <div class="errorRow">
+                        <html:messages id="error" property="flightDate1" message="false">
+                            <div id="errorreturnDate" class="error"><bean:write name="error" />
+                                 <div class="toplevelMessage"></div> 
+                            </div>
+                        </html:messages> 
+                    </div>    
+                    <div class="flightDetailsColumn">
+                        <div id="retrun1_accessbility">
+                            
+                            <!-- <label for="return1">${returningKey}</label>-->
+                            
+                            <html:hidden property="airSearchRequests[${1}].flightDate" styleId="return1" />
+                            <div class="clear"></div>
+                            <div class="calendar_control">
+                                <tiles:insert name="optionDate">
+                                    <tiles:put name="leaveDate" value="returnDate" />
+                                    <tiles:put name="leaveMonth" value="returnMonth" />
+                                    <tiles:put name="leaveYear" value="returnYear" />
+                                    <tiles:put name="returnDate" value="returnDate" />
+                                    <tiles:put name="returnMonth" value="returnMonth" />
+                                    <tiles:put name="returnYear" value="returnYear" />
+                                    <tiles:put name="dayTitleKey" value="${dayTitleReturnKey}" />
+                                </tiles:insert>
+                            </div>
+                            <div class="calendar_control">
+                                <tiles:insert name="optionMonth">
+                                    <tiles:put name="leaveDate" value="returnDate" />
+                                    <tiles:put name="leaveMonth" value="returnMonth" />
+                                    <tiles:put name="leaveYear" value="returnYear" />
+                                    <tiles:put name="returnDate" value="returnDate" />
+                                    <tiles:put name="returnMonth" value="returnMonth" />
+                                    <tiles:put name="returnYear" value="returnYear" />
+                                    <tiles:put name="monthTitleKey" value="${monthTitleReturnKey}" />
+                                </tiles:insert>
+                            </div>
+                            <div class="calendar_control">
+                                <label for="returnYear">${yearLabelKey}</label>
+                                <select name="returnYear" id="returnYear" tabindex="0" title="${yearTitleReturnKey}" onchange="dateValidate('returnDate','returnMonth','returnYear');" >
+                                </select>
+                            </div>
+
+                        </div>
+                    </div>
+                    <div class="clear"></div>
+                      
+                    <div class="errorRow">
+                        <html:messages id="error" property="flightTime1" message="false">
+                            <div id="error${timeStyleIdTo}" class="error"><bean:write name="error" />
+                                <div class="toplevelMessage"></div> 
+                            </div>
+                        </html:messages> 
+                    </div>    
+                    <div class="flightDetailsColumn">
+                        <div class="travel_mode_control">
+                            <div class="hiddenHeading">
+                                <bean:message key="Use combobox to define Departing or Arriving time for the Returning flight" /> 
+                            </div>
+                            <label for="returnDepartArrive">${departArriveKey}</label>
+                            <html:select property="airSearchRequests[${1}].useDepartOrArrive" styleId="returnDepartArrive" tabindex="0" title="${departArriveTitleKey}">
+                                <c:choose>
+                                <c:when test="${airConfigurationSettings.defaultReturnTimeDepOrArr == 'arrive'}">
+                                    <html:option value="arrive">${arriveKey}</html:option>
+                                    <html:option value="depart">${departKey}</html:option>              
+                                </c:when>
+                                <c:otherwise>
+                                    <html:option value="depart">${departKey}</html:option>
+                                    <html:option value="arrive">${arriveKey}</html:option>
+                                </c:otherwise>
+                                </c:choose>
+                            </html:select>
+                        </div>
+                        <div class="travel_mode_control">
+                            <label for="toTime">${timeKey}</label>
+                            <c:set var="timeListValueTo" value="airSearchRequests[${1}].flightTime" scope="request" />
+                            <c:set var="timeStyleIdTo" value="toTime" scope="request" />                
+                            <c:choose>
+                                <c:when test="${airConfigurationSettings.show12hourTime}">
+                                    <tiles:insert name="optionTime">
+                                        <tiles:put name="timeList" value="${timeListValueTo}" />
+                                        <tiles:put name="timeStyle" value="${timeStyleIdTo}" />
+                                        <c:if test="${flightSearchForm.allowUserToEnterSpecificTime}">
+                                            <tiles:put name="userEnteredFlightTime1" value="${flightSearchForm.airSearchRequests[1].flightTime}" />     
+                                        </c:if>
+                                        <tiles:put name="timeTitleKey" value="${timeTitle}" />
+                                    </tiles:insert>
+                                </c:when>
+                                <c:otherwise>
+                                    <tiles:insert name="optionTime24">
+                                        <tiles:put name="timeList" value="${timeListValueTo}" />
+                                        <tiles:put name="timeStyle" value="${timeStyleIdTo}" />
+                                        <c:if test="${flightSearchForm.allowUserToEnterSpecificTime}">
+                                            <tiles:put name="userEnteredFlightTime1" value="${flightSearchForm.airSearchRequests[1].flightTime}" />     
+                                        </c:if>
+                                        <tiles:put name="timeTitleKey" value="${timeTitle}" />
+                                    </tiles:insert>
+                                </c:otherwise>
+                            </c:choose>
+                        </div>
+                    </div>
+                    <div class="clear"></div>
+                    
+                    <div class="errorRow">
+                        <html:messages id="error" property="connectionCity1" message="false">
+                            <div id="errorreturnConnectCity" class="error"><bean:write name="error" />
+                                <div class="toplevelMessage"></div> 
+                            </div>
+                        </html:messages> 
+                    </div>
+                    <div class="flightDetailsColumn">
+                        <c:if test="${airConfigurationSettings.showConnectionCheckBox}">
+                            <label for="returnConnectCity">${connCityKey}</label>
+                            <div>
+                                <html:text property="airSearchRequests[${1}].connectionCity" styleId="returnConnectCity" tabindex="0" onkeyup="javascript:disableNonStopCheckBox('returnConnectCity','returnNonStop');" title="${connectionCityTitleKeyReturn}"/>
+                            </div>
+                            <div class="clear"></div>
+                            <c:choose>
+                                <c:when test="${enableRail}">
+                                    <c:url value="/lookupAirPortRailPage.do" var="newSearchURL0">
+                                        <c:param name="newSearch" value="pagePopUp" />
+                                        <c:param name="newType" value="0" />    
+                                    </c:url>
+                                </c:when>
+                                <c:otherwise>
+                                    <c:url value="/lookupAirPortPage.do" var="newSearchURL0">
+                                        <c:param name="newSearch" value="pagePopUp" />
+                                        <c:param name="newType" value="0" />    
+                                    </c:url>
+                                </c:otherwise>
+                            </c:choose>
+                            <div id="siteButtonLookup">
+                                 <tiles:insert name="${lookupButtonKey}" >
+                                    <tiles:put name="btnUrl" value="javascript:getAirportPopup('${newSearchURL0}','returnConnectCity');"></tiles:put>
+                                    <tiles:put name="title" value="${airportLookupBtnTitle}"></tiles:put>
+                                    <tiles:put name="btnSpan" value="lookupButtonflight"></tiles:put>
+                                 </tiles:insert>
+                            </div>
+                        </c:if>
+                        <div class="clear"></div>
+                        <c:if test="${airConfigurationSettings.showNonStopOnlyCheckBox}">
+                            <div class="checkboxWrapper">
+                                <html:checkbox property="airSearchRequests[${1}].nonStopOnly" styleId="returnNonStop" styleClass="checkbox" tabindex="0" onclick="javascript:disableConnectionCityTextBox('returnConnectCity');" />
+                                <label for="returnNonStop" class="nonStop checkboxLabel" id="dns">${nonStopKey}</label>
+                            </div>
+                        </c:if>
+                    </div>
+                    <div class="clear"></div>
+                    
+                </div>
+                <div class="clear"></div>
+        </div>
+        <!--  END: return -->         
+             
+        <%-- oneway leg and 3 multicity leg dynamic form generation starts --%>
+        <c:forEach items="${flightSearchForm.airSearchRequests}" var="item" begin="2" varStatus="status">
+            <c:set var="index" value="${status.index}" />
+            
+            <c:choose>
+                <c:when test="${status.first}">
+                    <c:set var="containerID" value="oneWayFlight" />
+                    <c:set var="headerID" value="oneWayMultiCityHeader" />
+                </c:when>
+                <c:otherwise>
+                    <c:set var="containerID" value="multiCityFlight${index - 1}" />
+                    <c:set var="headerID" value="" />
+                </c:otherwise>
+            </c:choose>
+            <div id="${containerID}">
+                <div id="flight${index - 1}">
+            
+                    <h3 id="${headerID}"><bean:message key="Segment Number {0} for Multi-city search" arg0="${index-1}" /></h3>
+                        
+                            <div  class="leave_column">
+                                
+                                <div class="errorRow">
+                                    <html:messages id="error" property="fromCity${index}" message="false">
+                                        <div id="errorfrom${index}" class="error"><bean:write name="error" />
+                                            <div class="toplevelMessage"></div> 
+                                        </div>
+                                    </html:messages> 
+                                </div>
+                                <div class="flightDetailsColumn">
+                                    <label for="from${index}" class="from">${fromKeyAccessibility}</label>
+                                    <div>
+                                <c:set var="defaultSelected" value="false"/>
+                                    <c:choose>
+                                    <c:when test="${!flightSearchForm.acPass}">
+                                        <html:text property="airSearchRequests[${index}].fromCity" styleId="from${index}" title="${fromTitleKey}" tabindex="0" styleClass="from" />
+                                    </c:when>
+
+                                    <c:otherwise>
+                                        <c:set var="travelerAirportCode" value="${sessionScope.travelerAirportCode}"/>
+                                        <c:set var="selectedFromAirport" value="${flightSearchForm.airSearchRequests[index].fromCity}"/>
+                                            <html:select name="flightSearchForm" property="airSearchRequests[${index}].fromCity" size="0" value="${flightSearchForm.airSearchRequests[index].fromCity}" styleId="from${index}"  style="width:160px" onchange="javascript:populateToAirports();" >
+                                            <option value="-1" selected="selected">Please Select</option>
+                                                <c:forEach items="${flightSearchForm.fromAirportsList}" var="fromAirports" varStatus="fromAirportStatus">
+                                                    <c:choose>
+                                                        <c:when test="${fromAirports.airportCode eq travelerAirportCode}">
+                                                            <option value="${fromAirports.airportCode}" selected="selected">${fromAirports.displayAirport}</option>
+                                                            <c:set var="defaultSelected" value="true"/>
+                                                        </c:when>
+                                                        <c:otherwise>
+                                                            <c:choose>
+                                                                 <c:when test="${fromAirports.airportCode eq selectedFromAirport}">
+                                                                    <option value="${fromAirports.airportCode}" selected="selected">${fromAirports.displayAirport}</option>     
+                                                                 </c:when>
+                                                                 <c:otherwise>
+                                                                    <option value="${fromAirports.airportCode}">${fromAirports.displayAirport}</option>
+                                                                 </c:otherwise>
+                                                            </c:choose>
+                                                        </c:otherwise>
+                                                    </c:choose>
+                                                </c:forEach>    
+                                            </html:select>
+                                    </c:otherwise>
+                                    </c:choose>
+                                    <c:if test="${defaultSelected}">
+                                        <script language="javascript">
+                                            populateToAirports();
+                                        </script>
+                                    </c:if> 
+                                        <div class="required"></div>
+                                    </div>
+                                    <c:choose>
+                                        <c:when test="${enableRail}">
+                                            <c:url value="/lookupAirPortRailPage.do" var="newSearchURL0">
+                                                <c:param name="newSearch" value="pagePopUp" />
+                                                <c:param name="newType" value="0" />                    
+                                            </c:url>
+                                        </c:when>
+                                        <c:otherwise>
+                                            <c:url value="/lookupAirPortPage.do" var="newSearchURL0">
+                                                <c:param name="newSearch" value="pagePopUp" />
+                                                <c:param name="newType" value="0" />                    
+                                            </c:url>
+                                        </c:otherwise>
+                                    </c:choose>
+                                    <div class="clear"></div>
+                                    <div id="siteButtonLookup">
+                                    <c:if test="${!flightSearchForm.acPass}">
+                                     <tiles:insert name="${lookupButtonKey}" >
+                                        <tiles:put name="btnUrl" value="javascript:getAirportPopup('${newSearchURL0}','from${index}');"></tiles:put>
+                                        <tiles:put name="title" value="${airportLookupBtnTitle}"></tiles:put>
+                                        <tiles:put name="btnSpan" value="lookupButtonflight${index}"></tiles:put>
+                                     </tiles:insert>
+                                     </c:if>
+                                    </div>
+                                    <div>${leavingKey}</div>
+                                    <c:if test="${!empty flightSearchForm.cabinClasses}">
+                                        <label for="cabinList${index}">${classFareTypeKey}</label>
+                                        <html:select name="flightSearchForm" property="airSearchRequests[${index}].selectedCabin" size="0" styleId="cabinList${index}" title="${leaveclassFareTitleKey}" tabindex="0">
+                                            <c:forEach items="${flightSearchForm.cabinClasses}" var="cabin" varStatus="cabinStatus">
+                                                <html:option value="${cabinStatus.index}"><bean:message key="${cabin.cabin}" /></html:option>
+                                            </c:forEach>    
+                                        </html:select>
+                                    </c:if>
+                                </div>
+                                    
+                                
+                                <div class="errorRow">
+                                    <html:messages id="error" property="flightDate${index}" message="false">
+                                        <div id="errorleaveDate${index}" class="error"><bean:write name="error" />
+                                            <div class="toplevelMessage"></div> 
+                                        </div>
+                                    </html:messages> 
+                                </div>
+                                <div class="flightDetailsColumn">
+                                    <div id="leave${index}_accessbility">
+                                        <!-- <label for="flightDate${index}">${leavingKey}</label>-->
+                                        
+                                        <html:hidden property="airSearchRequests[${index}].flightDate" styleId="leave${index}" />
+                                        <div class="clear"></div>
+                                        <div class="calendar_control">
+                                            <tiles:insert name="optionDate">
+                                                <tiles:put name="leaveDate" value="leaveDate${index}" />
+                                                <tiles:put name="leaveMonth" value="leaveMonth${index}" />
+                                                <tiles:put name="leaveYear" value="leaveYear${index}" />
+                                                <c:if test="${index == 2 || index == 3 || index == 4 }">    
+                                                        <tiles:put name="returnDate" value="leaveDate${index+1}" />
+                                                        <tiles:put name="returnMonth" value="leaveMonth${index+1}" />
+                                                        <tiles:put name="returnYear" value="leaveYear${index+1}" />
+                                                </c:if> 
+                                                <c:if test="${index == 5 }">
+                                                        <tiles:put name="returnDate" value="leaveDate${index}" />
+                                                        <tiles:put name="returnMonth" value="leaveMonth${index}" />
+                                                        <tiles:put name="returnYear" value="leaveYear${index}" />
+                                                </c:if>
+                                                <tiles:put name="dayTitleKey" value="${dayTitleLeaveKey}" />
+                                            </tiles:insert>
+                                        </div>
+                                        <div class="calendar_control">
+                                            <tiles:insert name="optionMonth">
+                                                <tiles:put name="leaveDate" value="leaveDate${index}" />
+                                                <tiles:put name="leaveMonth" value="leaveMonth${index}" />
+                                                <tiles:put name="leaveYear" value="leaveYear${index}" />
+                                                <c:if test="${index == 2 || index == 3 || index == 4 }">    
+                                                        <tiles:put name="returnDate" value="leaveDate${index+1}" />
+                                                        <tiles:put name="returnMonth" value="leaveMonth${index+1}" />
+                                                        <tiles:put name="returnYear" value="leaveYear${index+1}" />
+                                                </c:if> 
+                                                <c:if test="${index == 5 }">
+                                                        <tiles:put name="returnDate" value="leaveDate${index}" />
+                                                        <tiles:put name="returnMonth" value="leaveMonth${index}" />
+                                                        <tiles:put name="returnYear" value="leaveYear${index}" />
+                                                </c:if>
+                                                <tiles:put name="monthTitleKey" value="${monthTitleLeaveKey}" />
+                                            </tiles:insert>
+                                        </div>
+                                        <div class="calendar_control">
+                                            <label for="leaveYear${index}">${yearLabelKey}</label>
+                                            <select name="leaveYear${index}" id="leaveYear${index}" tabindex="0" title="${yearTitleLeaveKey}" onchange="dateValidate('leaveDate${index}','leaveMonth${index}','leaveYear${index}');">
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="clear"> </div>
+                                
+                                <div class="errorRow">
+                                    <html:messages id="error" property="flightTime${index}" message="false">
+                                        <div id="error${timeStyleIdFrom}" class="error"><bean:write name="error" />
+                                            <div class="toplevelMessage"></div> 
+                                        </div>
+                                    </html:messages> 
+                                </div>
+                                <div class="flightDetailsColumn">
+                                    <div class="travel_mode_control">
+                                        <div class="hiddenHeading">
+                                            ${departArriveFreeTextKey} 
+                                        </div>
+                                        <label for="leaveDepartArrive${index}">${departArriveKey}</label>
+                                        <html:select property="airSearchRequests[${index}].useDepartOrArrive" styleId="leaveDepartArrive${index}" tabindex="0" title="${departArriveTitleKey}">
+                                            <c:choose>
+                                            <c:when test="${airConfigurationSettings.defaultFromTimeDepOrArr == 'arrive'}">
+                                                <html:option value="arrive">${arriveKey}</html:option>
+                                                <html:option value="depart">${departKey}</html:option>              
+                                            </c:when>
+                                            <c:otherwise>
+                                                <html:option value="depart">${departKey}</html:option>
+                                                <html:option value="arrive">${arriveKey}</html:option>
+                                            </c:otherwise>
+                                            </c:choose>
+                                        </html:select>
+                                    </div>
+                                    <div class="travel_mode_control">
+                                        <label for="fromTime">${timeKey}</label>
+                                        <c:set var="timeListValueFrom" value="airSearchRequests[${index}].flightTime" scope="request" />
+                                        <c:set var="timeStyleIdFrom" value="fromTime" scope="request" />    
+                                        <c:choose>
+                                            <c:when test="${airConfigurationSettings.show12hourTime}">
+                                                <tiles:insert name="optionTime">
+                                                    <tiles:put name="timeList" value="${timeListValueFrom}" />
+                                                    <tiles:put name="timeStyle" value="${timeStyleIdFrom}" />
+                                                    <c:if test="${flightSearchForm.allowUserToEnterSpecificTime}">
+                                                        <tiles:put name="userEnteredFlightTime2" value="${flightSearchForm.airSearchRequests[index].flightTime}" />
+                                                    </c:if>
+                                                    <tiles:put name="timeTitleKey" value="${timeTitle}" />
+                                                </tiles:insert>
+                                            </c:when>
+                                            <c:otherwise>
+                                                <tiles:insert name="optionTime24">
+                                                    <tiles:put name="timeList" value="${timeListValueFrom}" />
+                                                    <tiles:put name="timeStyle" value="${timeStyleIdFrom}" />
+                                                    <c:if test="${flightSearchForm.allowUserToEnterSpecificTime}">                      
+                                                        <tiles:put name="userEnteredFlightTime2" value="${flightSearchForm.airSearchRequests[index].flightTime}" />
+                                                    </c:if>
+                                                    <tiles:put name="timeTitleKey" value="${timeTitle}" />
+                                                </tiles:insert>
+                                            </c:otherwise>
+                                        </c:choose>
+                                    </div>
+                                </div>
+                                <div class="clear"></div>
+                            
+                                <div class="errorRow">
+                                    <html:messages id="error" property="connectionCity${index}" message="false">
+                                        <div id="errordepartConnectCity${index}" class="error"><bean:write name="error" />
+                                            <div class="toplevelMessage"></div> 
+                                        </div>
+                                    </html:messages> 
+                                </div>
+                                <div class="flightDetailsColumn">
+                                    <c:if test="${airConfigurationSettings.showConnectionCheckBox}">
+                                        <label for="departConnectCity${index}">${connCityKey}</label>
+                                        <div>
+                                            <html:text property="airSearchRequests[${index}].connectionCity" styleId="departConnectCity${index}" tabindex="0" onkeyup="javascript:disableNonStopCheckBox('departConnectCity${index}','departNonStop${index}');" title="${connectionCityTitleKeyLeave}"/>
+                                        </div>
+                                        <c:choose>
+                                            <c:when test="${enableRail}">
+                                                <c:url value="/lookupAirPortRailPage.do" var="connectionCity0">
+                                                    <c:param name="newSearch" value="pagePopUp" />
+                                                    <c:param name="newType" value="0" />                
+                                                </c:url>
+                                            </c:when>
+                                            <c:otherwise>
+                                                <c:url value="/lookupAirPortPage.do" var="connectionCity0">
+                                                    <c:param name="newSearch" value="pagePopUp" />
+                                                    <c:param name="newType" value="0" />                
+                                                </c:url>
+                                            </c:otherwise>
+                                        </c:choose>
+                                        <div class="clear"></div>
+                                        <div id="siteButtonLookup">
+                                         <tiles:insert name="${lookupButtonKey}" >
+                                            <tiles:put name="btnUrl" value="javascript:getAirportPopup('${connectionCity0}','departConnectCity${index}');"></tiles:put>
+                                            <tiles:put name="title" value="${airportLookupBtnTitle}"></tiles:put>
+                                            <tiles:put name="btnSpan" value="lookupButtonflight${index}"></tiles:put>
+                                         </tiles:insert>
+                                        </div>
+                                    </c:if>
+                                    <div class="clear"></div>
+                                    <c:if test="${airConfigurationSettings.showNonStopOnlyCheckBox}">
+                                        <div class="checkboxWrapper">
+                                            <html:checkbox property="airSearchRequests[${index}].nonStopOnly" styleId="departNonStop${index}" tabindex="0" styleClass="checkbox" onclick="javascript:disableConnectionCityTextBox('departConnectCity${index}');" />
+                                            <label for="departNonStop${index}" class="nonStop checkboxLabel" id="dns">${nonStopKey}</label>
+                                        </div>
+                                    </c:if>
+                                </div>
+                                <div class="clear"></div>
+
+                            </div>
+                        
+                            <div class="return_column">
+                                
+                                <div class="errorRow">
+                                    <html:messages id="error" property="toCity${index}" message="false">
+                                        <div id="errorto${index}" class="error"><bean:write name="error" />
+                                            <div class="toplevelMessage"></div> 
+                                        </div>
+                                    </html:messages> 
+                                </div>
+                                <div class="flightDetailsColumn">
+                                    <label for="to${index}">${toKeyAccessibility}</label>
+                                    <div>
+                                        <c:choose>
+                                        <c:when test="${!flightSearchForm.acPass}">
+                                            <html:text property="airSearchRequests[${index}].toCity" styleId="to${index}" title="${toTitleKey}" tabindex="0" onchange="populateCity(${index})" />
+                                        </c:when>
+                                        <c:otherwise>
+                                        <c:set var="selectedToAirport" value="${flightSearchForm.airSearchRequests[index].toCity}"/>
+                                        <c:set var="selectedFromAirport" value="${flightSearchForm.airSearchRequests[index].fromCity}"/>
+                                            <html:select name="flightSearchForm" property="airSearchRequests[${index}].toCity" value="${flightSearchForm.airSearchRequests[index].toCity}" size="0" styleId="to${index}"  style="width:160px"  onchange="populateSearchReq(this);">
+                                                <c:choose>
+                                                    <c:when test="${selectedFromAirport eq '' or selectedFromAirport eq -1}">
+                                                        <option value="-1" selected="selected">Select Departure Airport</option>
+                                                    </c:when>
+                                                    <c:otherwise>
+                                                        <option value="-1" selected="selected">Please Select</option>
+                                                    </c:otherwise>
+                                                </c:choose>
+                                                <c:forEach items="${flightSearchForm.toAirportsList}" var="toAirports" varStatus="toAirportStatus">
+                                                    <c:choose>
+                                                    <c:when test="${toAirports.airportCode eq selectedToAirport}">
+                                                        <option value="${toAirports.airportCode}" selected="selected">${toAirports.displayAirport}</option>
+                                                    </c:when>
+                                                    <c:otherwise>
+                                                        <option value="${toAirports.airportCode}">${toAirports.displayAirport}</option>
+                                                    </c:otherwise>
+                                                    </c:choose>
+                                                </c:forEach>    
+                                            </html:select>
+                                        </c:otherwise>
+                                </c:choose>
+                                        <div class="required"></div>
+                                    </div>
+                                    <c:choose>
+                                        <c:when test="${enableRail}">
+                                            <c:url value="/lookupAirPortRailPage.do" var="newSearchURL0">
+                                                <c:param name="newSearch" value="pagePopUp" />
+                                                <c:param name="newType" value="0" />                    
+                                            </c:url>
+                                        </c:when>
+                                        <c:otherwise>
+                                            <c:url value="/lookupAirPortPage.do" var="newSearchURL0">
+                                                <c:param name="newSearch" value="pagePopUp" />
+                                                <c:param name="newType" value="0" />                    
+                                            </c:url>
+                                        </c:otherwise>
+                                    </c:choose>
+                                    <div class="clear"></div>
+                                    <div id="siteButtonLookup">
+                                    <c:if test="${!flightSearchForm.acPass}">
+                                         <tiles:insert name="${lookupButtonKey}" >
+                                            <tiles:put name="btnUrl" value="javascript:getAirportPopup('${newSearchURL0}','to${index}');"></tiles:put>
+                                            <tiles:put name="title" value="${airportLookupBtnTitle}"></tiles:put>
+                                            <tiles:put name="btnSpan" value="lookupButtonflight${index}"></tiles:put>
+                                         </tiles:insert>
+                                     </c:if>
+                                    </div>
+                                </div>
+                                <div class="clear"></div>
+
+                            </div>
+                       
+                        <div class="clear"></div>
+                       
+                        <c:if test="${index == 4 || index == 5}">
+                            <html:link href="#" anchor="removeFlightAnchor${index}" tabindex="-2"/>
+                            <html:link href="#removeFlightAnchor${index}" styleId="removeFlight${index-1}" tabindex="0" title="${removeFlightKey}" onclick="removeFlight(this);">${remFlightKey}</html:link>
+                        </c:if>
+                        <html:hidden property="airSearchRequests[${index}].legDisplayed" />
+                </div>
+            </div>
+        </c:forEach>
+</c:otherwise>
+</c:choose> 
+    <div id="addFlightButtonContainer" style="display:none">
+        <html:link href="#" anchor="addFlightAnchor" tabindex="-2"/>
+       <html:link href="#addFlightAnchor" styleId="addFlight" title="${addFlightKey}" tabindex="0" onclick="addFlight();">${addFLRKey}</html:link>
+    </div>
+    <%-- oneway leg and 3 multicity leg dynamic form generation ends --%>
+
+    <div id="siteButton02">
+    <c:choose>
+        <c:when test="${enableRail}">
+            <tiles:insert name="buttonFR">
+                <tiles:put name="btnSpan" value="searchButtonflight"></tiles:put>
+            </tiles:insert>
+        </c:when>
+        <c:otherwise>
+            <tiles:insert name="button">
+                <tiles:put name="btnSpan" value="searchButtonflight"></tiles:put>
+            </tiles:insert>
+        </c:otherwise>
+    </c:choose>
+    </div>
+    <div id="additionalSearch">
+        <h3><bean:message key="Additional Search Criteria" /></h3>
+        <div class="errorRow">
+            <html:messages id="error" property="departTimeWindow" message="false">
+                <div id="errordepartTimeWindow" class="error">${error}
+                    <div class="toplevelMessage"></div> 
+                </div>
+            </html:messages> 
+        </div>
+        <c:if test="${airConfigurationSettings.showTimeWindowSettings}">
+            <c:if test="${!empty flightSearchForm.timeWindows}">
+                <label for="departTimeWindow" id="dtw"><bean:message key="Time window for search:" /></label>
+                <c:if test="${accessibilityEnabled}">
+                    <div class="hiddenHeading">
+                        <bean:message key="Below combobox helps you to define the flight time window to search flights within the time ranges preceding and following the specific flight times entered above" />
+                    </div>
+                </c:if>
+                <div class="clear"></div>
+                <html:select name="flightSearchForm" property="departTimeWindow" size="0" title="${timewindowTitleKey}" styleId="departTimeWindow" tabindex="0" onchange="javascript:getWhatIsThisDesc((this.value - 1));displayWhatIsThisLinkIfNecessary(this.value - 1);">
+                    <html:optionsCollection property="timeWindows" value="value" label="label"/>
+                </html:select>
+                <c:choose>
+                <c:when test="${!accessibilityEnabled}">
+                    <div class="infoIcon">
+                        <html:link href="#whatIsThisLink" styleClass="infoIcon" onclick="javascript:showWhatIsThis();" styleId="whatIsThisLink">
+                            <%-- Start Following Code has been changed by Cognizant Technology Solutions on 01/27/2009 Defect#:6473:Modified so that Information Icon should not be displayed --%>
+                            <img src="${webappPath}/img/icons/infoIcon.gif" alt="" /><span><bean:message key="Use the time window search to allow different time ranges preceding and following the specific times entered above." /></span>
+                            <%-- End of Change - Cognizant Technology Solutions on Defect#6473 01/27/2009--%>
+                        </html:link>
+                        <html:link href="#whatIsThisLink" styleClass="infoIcon" styleId="timeWindowInfoIcon">
+                            <%-- Start Following Code has been changed by Cognizant Technology Solutions on 01/27/2009 Defect#:6473:Modified so that Information Icon should not be displayed --%>
+                            <img src="${webappPath}/img/icons/infoIcon.gif" alt="" /><span><bean:message key="Use the time window search to allow different time ranges preceding and following the specific times entered above." /></span>
+                            <%-- End of Change - Cognizant Technology Solutions on Defect#6473 01/27/2009--%>
+                        </html:link>
+                    </div>
+                </c:when>
+                <c:otherwise>
+                    <div class="infoIcon">
+                        <html:link href="#whatIsThisLink" styleClass="infoIcon" onclick="javascript:showWhatIsThis();" styleId="whatIsThisLink" title="${infoIconTitleKey}" tabindex="0">
+                            <%-- Start Following Code has been changed by Cognizant Technology Solutions on 01/27/2009 Defect#:6473:Modified so that Information Icon should not be displayed --%>
+                            <img src="${webappPath}/img/icons/infoIcon.gif" alt="${infoIconTitleKey}" />
+                            <%-- End of Change - Cognizant Technology Solutions on Defect#6473 01/27/2009--%>
+                        </html:link>
+                        <html:link href="#whatIsThisLink" styleClass="infoIcon" styleId="timeWindowInfoIcon" title="${infoIconTitleKey}" tabindex="0">
+                            <%-- Start Following Code has been changed by Cognizant Technology Solutions on 01/27/2009 Defect#:6473:Modified so that Information Icon should not be displayed --%>
+                            <img src="${webappPath}/img/icons/infoIcon.gif" alt="${infoIconTitleKey}" />
+                            <%-- End of Change - Cognizant Technology Solutions on Defect#6473 01/27/2009--%>
+                        </html:link>
+                    </div>
+                </c:otherwise>
+                </c:choose>
+                <div class="clear"></div>
+                <html:hidden property="whatIsThisDesc" styleId="whatIsThisDesc" />
+            </c:if>
+        </c:if>
+        <c:if test="${airConfigurationSettings.showPreferredAirlines}"> 
+            <label for="preferredAirline" id="par"><bean:message key="Preferred Supplier:" /></label> 
+          <c:if test="${airConfigurationSettings.showAirlineDirectoryLink}">    
+            <span>
+            <%--Defect Id : 5889 # here we create action url with param for Airline Directory Link --%>
+            <c:url value="/flightSearch.do" var="flightSearchURL">
+                    <c:param name="airlineDir" value="true" />                  
+            </c:url>
+            (<html:link href="javascript:submitFlightSearchForm('${flightSearchURL}')" title="${airlineDirTitleKey}" tabindex="0"><bean:message key="Supplier Directory" /></html:link>)
+            </span>
+          </c:if>
+            <html:select property="preferredAirline" styleId="preferredAirline" title="${preferredTitleKey}" tabindex="0">
+                <html:option value="noPreference"><bean:message key="No Preference"/></html:option>
+                <c:forEach items="${flightSearchForm.preferredAirlinesList}" var="airlineItem" varStatus="airlineStatus">
+                    <html:option value="${airlineStatus.index}">${airlineItem.vendor.name}</html:option>
+                </c:forEach>
+                <%-- show user preferred Airlines if available  --%>
+                <c:if test="${not empty flightSearchForm.userPreferredAirlinesList}">
+                    <html:option value="myCarriers" ><bean:message key="My Suppliers"/></html:option>
+                </c:if>
+            </html:select>
+        </c:if> 
+
+        
+        <c:if test="${airConfigurationSettings.showRefundOnlyCheckBox or airConfigurationSettings.showWebFaresCheckBox or (enableRail and airConfigurationSettings.showRailOnlyCheckBox)}">
+            <h3><bean:message key="Include in Search:" /></h3>
+        </c:if>
+        <c:if test="${airConfigurationSettings.showRefundOnlyCheckBox}">
+            <div class="asRow">
+            <%-- Defect # 6122 Changes Start --%>
+                <html:checkbox property="refundable" styleId="refundable" onclick="javascript:saveRefundableCheckBoxState()" tabindex="0"/> 
+            <%-- Defect # 6122 Changes End --%>
+                <label for="refundable" id="rfd"><bean:message key="Refundable Only" /> (<bean:message key="Penalties may apply to refundable fares." />)</label>
+            </div>
+        </c:if>
+        <c:if test="${enableRail and airConfigurationSettings.showRailOnlyCheckBox}">
+            <div class="asRow">
+                <html:checkbox property="railOnly" styleId="railOnly" onclick="javascript:saveRailOnlyCheckBoxState()" tabindex="0"/> 
+                <label for="railOnly" id="rlOnly"><bean:message key="Display only rail options" /></label>
+            </div>
+        </c:if>
+        <c:if test="${airConfigurationSettings.showWebFaresCheckBox}">
+            <div class="asRow">
+                <html:checkbox property="webFares" styleId="webFares" name="flightSearchForm" tabindex="0"/> 
+                <label for="webFares" id="wfrs"><bean:message key="Web Fares" /></label>
+            </div>
+        </c:if>
+        <tiles:insert name="shoppingFlowModule"/>
+    </div>
+    <!-- Advanced Air Options -->
+    <html:hidden property="comingFromQADisplay" name="comingFromQADisplay" value="false"/>
+    <html:hidden property="comingFromMessageDisplay" name="comingFromMessageDisplay" value="false"/>
+    <html:hidden property="processingOptions" value="${flightSearchForm.processingOptions}"/>
+    <html:hidden property="startFlightSearch" value="${flightSearchForm.startFlightSearch}"/>
+    <c:if test="${flightSearchForm.optionsData != null}">
+        <iframe id="divShimPW" src="javascript:false;"></iframe> 
+            <div id="advanceAirContainer" autofocus="true">
+                <tiles:insert name="advancedAirOptions"> 
+                <tiles:put name="flightSrchForm" value="flightSrchForm"/>
+                </tiles:insert>
+            </div>  
+    </c:if>
+    <c:if test="${accessibilityEnabled}">
+     <c:if test="${not empty policyWarningMessages}">
+        <div id="dialogPWDojo" dojoType="dijit.Dialog" role="alertdialog" aria-live="assertive" jsid="dialogPWDojoJDID"  style="width: 400px; height: 300px;"  align="center" style="display: none" class="tundra borderDojo" autofocus="true">
+            <div id="policyWarningContentPane" dojoType="dijit.layout.ContentPane" region="top" align="left" style="width: 400px; height: 300px;" class="tundra">
+                <div id="policyDojo">
+                    <label for="mainButton" class="hiddenLabel"><bean:message key="You may need to Press Down Arrow to read the policy warning."/></label>
+                    <a href="#" tabindex="0" role="tooltip"><span id="mainButton" role="label"></span></a>
+                    <c:forEach items="${policyWarningMessages}" var="pwMsg">
+                        <div><bean:message key="${pwMsg}" /></div>
+                        <br/>
+                    </c:forEach>
+                    <tiles:insert name="policyWarningOKButton" >
+                        <tiles:put name="btnSpan" value="policyWarningOKBtn"/>  
+                        <tiles:put name="title" value="${tripadvisoryOkbtn}"/>
+                    </tiles:insert>
+                </div>
+            </div>
+        </div>
+      </c:if>
+      <c:if test="${shopping_cart.hasAir || shopping_cart.hasRail}">
+        <div class="warning" style="visibility: hidden;">
+            <c:choose>
+                <c:when test="${enableRail}">
+                    <bean:message key="Another flight/rail will not be added.  You can view your cart or start another flight/rail search." />
+                    <bean:message key="Selecting different flight/rail options will replace the current flight/rail in your shopping cart" />       
+                </c:when>
+                <c:otherwise>
+                    <bean:message key="Another flight will not be added.  You can view your cart or start another flight search." />
+                    <bean:message key="Selecting different flight options will replace the current flight in your shopping cart" />
+                </c:otherwise>
+            </c:choose>
+            <div class="toplevelWarning"></div> 
+        </div>
+      </c:if>
+       <html:hidden property="flightAnswerRadiohiden"   styleId="flightAnswerRadiohiden"/>
+    </c:if>
+    <c:if test="${!accessibilityEnabled}">
+        <c:if test="${not empty policyWarningMessages}">
+            <div id="policyWarningDialogDojo" dojoType="dijit.Dialog" role="alertdialog" aria-live="assertive" jsid="policyWarningDialogDojoJSID"   align="center" style="display: none" class="tundra" autofocus="true">
+                <div id="policyWarningDialogBorderContainer" dojoType="dijit.layout.BorderContainer" design="headline" 
+                        class="tundra"  jsid="policyWarningDialogBorderContainerJSID">
+                    <div id="policyWarningContentPane" dojoType="dijit.layout.ContentPane" region="top" align="left" class="tundra">
+                        <div id="dojoDialogDiv">
+                            <label for="mainButton" class="hiddenLabel"><bean:message key="You may need to Press Down Arrow to read the policy warning."/></label>
+                            <a href="#" tabindex="0" role="tooltip"><span id="mainButton" role="label"></span></a>
+                            <c:forEach items="${policyWarningMessages}" var="pwMsg">
+                                <div><bean:message key="${pwMsg}" /></div>
+                                <br/>
+                            </c:forEach>
+                        </div>
+                    </div>
+                    <div id="policyWarningButtonContentPane" dojoType="dijit.layout.ContentPane" region="bottom" align="center"  class="tundra">
+                        <button dojoType=dijit.form.Button type="button" onclick="javascript:dismissPolicyWarning()"
+                                id="policyWarningDojoButtonID" class="tundra">
+                                OK 
+                        </button>
+                    </div>
+                </div>
+            </div>
+          </c:if>
+      </c:if>
+</html:form>
+
+<!-- for fixing defect# 6750-->
+<%-- begin div to display travel policy warnings - IBM CR57 --%>
+<iframe id="divShimPW" src="javascript:false;"></iframe>
+<c:if test="${!accessibilityEnabled}">
+    <div id="policyWarningContainer">
+        <c:forEach items="${policyWarningMessages}" var="pwMsg">
+            <div><bean:message key="${pwMsg}" /></div>
+            <br/>
+        </c:forEach>
+            <tiles:insert name="policyWarningOKButton" />
+    </div>
+</c:if>
+<%-- end div to display travel policy warnings --%> 
